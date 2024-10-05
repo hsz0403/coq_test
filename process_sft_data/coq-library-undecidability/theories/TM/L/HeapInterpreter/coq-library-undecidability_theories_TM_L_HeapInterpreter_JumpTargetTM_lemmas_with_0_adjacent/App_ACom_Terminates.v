@@ -1,0 +1,81 @@
+From Undecidability Require Import TM.Code.ProgrammingTools LM_heap_def.
+From Undecidability.TM.L Require Import Alphabets CaseCom.
+From Undecidability Require Import TM.Code.ListTM TM.Code.CaseList TM.Code.CaseNat.
+Local Arguments plus : simpl never.
+Local Arguments mult : simpl never.
+Definition retr_nat_prog : Retract sigNat sigPro := Retract_sigList_X _.
+Definition App_ACom (t : ACom) : pTM sigPro^+ unit 2 := WriteValue [ACom2Com t] @ [|Fin1|];; App _.
+Definition App_ACom_size (t : ACom) (Q : list Tok) : Vector.t (nat->nat) 2 := [| id; WriteValue_size [ACom2Com t] |] >>> App_size Q [ACom2Com t].
+Definition App_ACom_Rel (t : ACom) : pRel sigPro^+ unit 2 := ignoreParam ( fun tin tout => forall (Q : list Tok) (s0 s1:nat), tin[@Fin0] ≃(;s0) Q -> isVoid_size tin[@Fin1] s1 -> tout[@Fin0] ≃(;App_ACom_size t Q @>Fin0 s0) Q ++ [ACom2Com t] /\ isVoid_size tout[@Fin1] (App_ACom_size t Q @>Fin1 s1) ).
+Arguments App_ACom_size : simpl never.
+Definition App_ACom_steps (Q: Pro) (t: ACom) := 1 + WriteValue_steps (size [ACom2Com t]) + App_steps Q [ACom2Com t].
+Definition App_ACom_T (t: ACom) : tRel sigPro^+ 2 := fun tin k => exists (Q: list Tok), tin[@Fin0] ≃ Q /\ isVoid tin[@Fin1] /\ App_ACom_steps Q t <= k.
+Definition App_Com : pTM sigPro^+ (FinType(EqType unit)) 3 := Constr_nil _ @ [|Fin2|];; Constr_cons _@ [|Fin2; Fin1|];; App _ @ [|Fin0; Fin2|];; Reset _ @ [|Fin1|].
+Definition App_Com_size (Q : list Tok) (t : Tok) : Vector.t (nat->nat) 3 := [| App_size Q [t] @>Fin0; Reset_size t; pred >> Constr_cons_size t >> App_size Q [t] @>Fin1 |].
+Definition App_Com_Rel : pRel sigPro^+ (FinType(EqType unit)) 3 := ignoreParam ( fun tin tout => forall (Q : list Tok) (t : Tok) (s0 s1 s2 : nat), tin[@Fin0] ≃(;s0) Q -> tin[@Fin1] ≃(;s1) t -> isVoid_size tin[@Fin2] s2 -> tout[@Fin0] ≃(;App_Com_size Q t @>Fin0 s0) Q ++ [t] /\ isVoid_size tout[@Fin1] (App_Com_size Q t @>Fin1 s1) /\ isVoid_size tout[@Fin2] (App_Com_size Q t @>Fin2 s2) ).
+Arguments App_Com_size : simpl never.
+Definition App_Com_steps (Q: Pro) (t:Tok) := 3 + Constr_nil_steps + Constr_cons_steps t + App_steps Q [t] + Reset_steps t.
+Definition App_Com_T : tRel sigPro^+ 3 := fun tin k => exists (Q: list Tok) (t: Tok), tin[@Fin0] ≃ Q /\ tin[@Fin1] ≃ t /\ isVoid tin[@Fin2] /\ App_Com_steps Q t <= k.
+Definition JumpTarget_Step : pTM sigPro^+ (option bool) 5 := If (CaseList sigCom_fin @ [|Fin0; Fin3|]) (Switch (ChangeAlphabet CaseCom _ @ [|Fin3|]) (fun t : option ACom => match t with | Some retAT => If (CaseNat ⇑ retr_nat_prog @ [|Fin2|]) (Return (App_ACom retAT @ [|Fin1; Fin4|]) None) (* continue *) (Return (ResetEmpty1 _ @ [|Fin2|]) (Some true)) (* return true *) | Some lamAT => Return (Constr_S ⇑ retr_nat_prog @ [|Fin2|];; App_ACom lamAT @ [|Fin1; Fin4|]) None (* continue *) | Some appAT => Return (App_ACom appAT @ [|Fin1;Fin4|]) None (* continue *) | None => (* Variable *) Return (Constr_varT ⇑ _ @ [|Fin3|];; App_Com @ [|Fin1; Fin3; Fin4|]) None (* continue *) end)) (Return Nop (Some false)) (* return false *) .
+Definition JumpTarget_Step_size (P Q : Pro) (k : nat) : Vector.t (nat->nat) 5 := match P with | retT :: _ => match k with | S _ => [| (*0*) CaseList_size0 retT; (*1*) App_ACom_size retAT Q @>Fin0; (*2*) S; (*3*) CaseList_size1 retT >> CaseCom_size retT; (*4*) App_ACom_size retAT Q @>Fin1 |] | 0 => [| (*0*) CaseList_size0 retT; (*1*) id; (*2*) ResetEmpty1_size; (*3*) CaseList_size1 retT >> CaseCom_size retT; (*4*) id |] end | lamT :: _ => [| (*0*) CaseList_size0 lamT; (*1*) App_ACom_size lamAT Q @>Fin0; (*2*) pred; (*3*) CaseList_size1 lamT >> CaseCom_size lamT; (*4*) App_ACom_size lamAT Q @>Fin1 |] | appT :: _ => [| (*0*) CaseList_size0 appT; (*1*) App_ACom_size appAT Q @>Fin0; (*2*) id; (*3*) CaseList_size1 retT >> CaseCom_size appT; (*4*) App_ACom_size appAT Q @>Fin1 |] | varT n :: _ => [| (*0*) CaseList_size0 (varT n); (*1*) App_Com_size Q (varT n) @>Fin0; (*2*) id; (*3*) CaseList_size1 (varT n) >> CaseCom_size (varT n) >> pred >> App_Com_size Q (varT n) @>Fin1; (*4*) App_Com_size Q (varT n) @>Fin2 |] | nil => Vector.const id _ end.
+Definition JumpTarget_Step_Rel : pRel sigPro^+ (option bool) 5 := fun tin '(yout, tout) => forall (P Q : Pro) (k : nat) (s0 s1 s2 s3 s4 : nat), let size := JumpTarget_Step_size P Q k in tin[@Fin0] ≃(;s0) P -> tin[@Fin1] ≃(;s1) Q -> tin[@Fin2] ≃(;s2) k -> isVoid_size tin[@Fin3] s3 -> isVoid_size tin[@Fin4] s4 -> match yout, P with | _, retT :: P => match yout, k with | Some true, O => (* return true *) tout[@Fin0] ≃(;size @>Fin0 s0) P /\ tout[@Fin1] ≃(;size @>Fin1 s1) Q /\ isVoid_size tout[@Fin2] (size @>Fin2 s2) | None, S k' => (* continue *) tout[@Fin0] ≃(;size @>Fin0 s0) P /\ tout[@Fin1] ≃(;size @>Fin1 s1) Q ++ [retT] /\ tout[@Fin2] ≃(;size @>Fin2 s2) k' | _, _ => False (* not the case *) end | None, lamT :: P => (* continue *) tout[@Fin0] ≃(;size@>Fin0 s0) P /\ tout[@Fin1] ≃(;size@>Fin1 s1) Q ++ [lamT] /\ tout[@Fin2] ≃(;size@>Fin2 s2) S k | None, t :: P => (* continue *) tout[@Fin0] ≃(;size@>Fin0 s0) P /\ tout[@Fin1] ≃(;size@>Fin1 s1) Q ++ [t] /\ tout[@Fin2] ≃(;size@>Fin2 s2) k | Some false, nil => (* return false *) True | _, _ => False (* not the case *) end /\ isVoid_size tout[@Fin3] (size@>Fin3 s3) /\ isVoid_size tout[@Fin4] (size@>Fin4 s4).
+Arguments JumpTarget_Step_size : simpl never.
+Local Definition JumpTarget_Step_steps_CaseCom (Q: Pro) (k: nat) (t: Tok) := match t with | retT => match k with | S _ => 1 + CaseNat_steps + App_ACom_steps Q retAT | 0 => 2 + CaseNat_steps + ResetEmpty1_steps end | lamT => 1 + Constr_S_steps + App_ACom_steps Q lamAT | appT => App_ACom_steps Q appAT | varT n => 1 + Constr_varT_steps + App_Com_steps Q t end.
+Local Definition JumpTarget_Step_steps_CaseList (P Q : Pro) (k: nat) := match P with | t :: P' => 1 + CaseCom_steps + JumpTarget_Step_steps_CaseCom Q k t | nil => 0 end.
+Definition JumpTarget_Step_steps (P Q: Pro) (k: nat) := 1 + CaseList_steps P + JumpTarget_Step_steps_CaseList P Q k.
+Definition JumpTarget_Step_T : tRel sigPro^+ 5 := fun tin steps => (* Warning: I have to use another variable for the steps, since [k] is used. *) exists (P Q : Pro) (k : nat), tin[@Fin0] ≃ P /\ tin[@Fin1] ≃ Q /\ tin[@Fin2] ≃ k /\ isVoid tin[@Fin3] /\ isVoid tin[@Fin4] /\ JumpTarget_Step_steps P Q k <= steps.
+Fixpoint jumpTarget_k (k:nat) (P:Pro) : nat := match P with | retT :: P' => match k with | 0 => 0 | S k' => jumpTarget_k k' P' end | lamT :: P' => jumpTarget_k (S k) P' | t :: P' => jumpTarget_k k P' (* either [varT n] or [appT] *) | [] => k end.
+Goal forall k P, jumpTarget_k k P <= k + |P|.
+Proof.
+intros k P.
+revert k.
+induction P as [ | t P IH]; intros; cbn in *.
+-
+lia.
+-
+destruct t; cbn.
++
+rewrite IH.
+lia.
++
+rewrite IH.
+lia.
++
+rewrite IH.
+lia.
++
+destruct k.
+lia.
+rewrite IH.
+lia.
+Definition JumpTarget_Loop := While JumpTarget_Step.
+Fixpoint JumpTarget_Loop_size (P Q : Pro) (k : nat) {struct P} : Vector.t (nat->nat) 5 := match P with | retT :: P' => match k with | O => (* return true *) JumpTarget_Step_size P Q k | S k' => (* continue *) JumpTarget_Step_size P Q k >>> JumpTarget_Loop_size P' (Q ++ [retT]) k' end | lamT :: P' => (* continue; increase k *) JumpTarget_Step_size P Q k >>> JumpTarget_Loop_size P' (Q ++ [lamT]) (S k) | t :: P' => (* continue *) JumpTarget_Step_size P Q k >>> JumpTarget_Loop_size P' (Q ++ [t]) k | nil => (* return false *) JumpTarget_Step_size P Q k end.
+Definition JumpTarget_Loop_Rel : pRel sigPro^+ bool 5 := fun tin '(yout, tout) => forall (P Q : Pro) (k : nat) (s0 s1 s2 s3 s4 : nat), let size := JumpTarget_Loop_size P Q k in tin[@Fin0] ≃(;s0) P -> tin[@Fin1] ≃(;s1) Q -> tin[@Fin2] ≃(;s2) k -> isVoid_size tin[@Fin3] s3 -> isVoid_size tin[@Fin4] s4 -> match yout with | true => exists (P' Q' : Pro), jumpTarget k Q P = Some (Q', P') /\ tout[@Fin0] ≃(;size@>Fin0 s0) P' /\ tout[@Fin1] ≃(;size@>Fin1 s1) Q' /\ isVoid_size tout[@Fin2] (size@>Fin2 s2) /\ isVoid_size tout[@Fin3] (size@>Fin3 s3) /\ isVoid_size tout[@Fin4] (size@>Fin4 s4) | false => jumpTarget k Q P = None end.
+Fixpoint JumpTarget_Loop_steps (P Q: Pro) (k: nat) : nat := match P with | nil => JumpTarget_Step_steps P Q k | t :: P' => match t with | retT => match k with | S k' => 1 + JumpTarget_Step_steps P Q k + JumpTarget_Loop_steps P' (Q++[t]) k' | 0 => JumpTarget_Step_steps P Q k (* terminal case *) end | lamT => 1 + JumpTarget_Step_steps P Q k + JumpTarget_Loop_steps P' (Q++[t]) (S k) | appT => 1 + JumpTarget_Step_steps P Q k + JumpTarget_Loop_steps P' (Q++[t]) k | varT n => 1 + JumpTarget_Step_steps P Q k + JumpTarget_Loop_steps P' (Q++[t]) k end end.
+Definition JumpTarget_Loop_T : tRel sigPro^+ 5 := fun tin steps => exists (P Q : Pro) (k : nat), tin[@Fin0] ≃ P /\ tin[@Fin1] ≃ Q /\ tin[@Fin2] ≃ k /\ isVoid tin[@Fin3] /\ isVoid tin[@Fin4] /\ JumpTarget_Loop_steps P Q k <= steps.
+Definition JumpTarget : pTM sigPro^+ bool 5 := Constr_nil _ @ [|Fin1|];; Constr_O ⇑ _ @ [|Fin2|];; JumpTarget_Loop.
+Definition JumpTarget_size (P : Pro) : Vector.t (nat->nat) 5 := [| id; pred; Constr_O_size; id; id |] >>> JumpTarget_Loop_size P nil 0.
+Definition JumpTarget_Rel : pRel sigPro^+ bool 5 := fun tin '(yout, tout) => forall (P : Pro) (s0 s1 : nat) (si : Vector.t nat 3), tin[@Fin0] ≃(;s0) P -> isVoid_size tin[@Fin1] s1 -> (forall i : Fin.t 3, isVoid_size tin[@FinR 2 i : Fin.t 5] si[@i]) -> match yout with | true => exists (P' Q' : Pro), jumpTarget 0 nil P = Some (Q', P') /\ tout[@Fin0] ≃(;JumpTarget_size P @>Fin0 s0) P' /\ tout[@Fin1] ≃(;JumpTarget_size P @>Fin1 s1) Q' /\ (forall i : Fin.t 3, isVoid_size tout[@FinR 2 i : Fin.t 5] (JumpTarget_size P @>(FinR 2 i) si[@i])) | false => jumpTarget 0 nil P = None end.
+Definition JumpTarget_steps (P : Pro) := 3 + Constr_nil_steps + Constr_O_steps + JumpTarget_Loop_steps P nil 0.
+Definition JumpTarget_T : tRel sigPro^+ 5 := fun tin k => exists (P : Pro), tin[@Fin0] ≃ P /\ isVoid tin[@Fin1] /\ (forall i : Fin.t 3, isVoid tin[@Fin.R 2 i]) /\ JumpTarget_steps P <= k.
+
+Lemma App_ACom_Terminates (t: ACom) : projT1 (App_ACom t) ↓ App_ACom_T t.
+Proof.
+eapply TerminatesIn_monotone.
+{
+unfold App_ACom.
+TM_Correct.
+-
+apply App_Terminates.
+}
+{
+intros tin k.
+intros (Q&HEncQ&HRight&Hk).
+exists (WriteValue_steps (size [ACom2Com t])), (App_steps Q [ACom2Com t]).
+cbn; repeat split; try (reflexivity + nia).
+now rewrite Hk.
+intros tmid () (HWrite&HInjWrite); hnf; cbn; TMSimp.
+cbn in HWrite.
+modpon HWrite.
+eauto.
+}

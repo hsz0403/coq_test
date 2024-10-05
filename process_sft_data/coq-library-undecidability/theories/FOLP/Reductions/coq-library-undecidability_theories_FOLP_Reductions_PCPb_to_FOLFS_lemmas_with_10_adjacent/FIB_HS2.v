@@ -1,0 +1,363 @@
+Require Import Equations.Equations.
+Require Import Lia Arith.
+Require Import Undecidability.PCP.PCP.
+From Undecidability Require Import FOLP.FOLFS.
+Require Import Undecidability.Shared.ListAutomation.
+Import ListAutomationNotations.
+Derive Signature for le.
+Local Notation "| s |" := (length s) (at level 100).
+Definition bstring n := { s : string bool | | s | <= n}.
+Definition bnil n : bstring n.
+Proof.
+exists nil.
+cbn.
+lia.
+Defined.
+Definition bcons n (b : bool) : bstring n -> bstring (S n).
+Proof.
+intros [s H].
+exists (b::s).
+cbn.
+lia.
+Defined.
+Definition bstring_step n (L : list (bstring n)) := [bnil (S n)] ++ map (bcons true) L ++ map (bcons false) L.
+Definition bcast n s (H : |s| <= n) : bstring n := exist _ _ H.
+Inductive what := pred | func.
+Definition make_sig (T : what -> nat -> Type) : Signature := {| Funcs := {n & T func n} ; fun_ar := @projT1 _ _ ; Preds := {n & T pred n} ; pred_ar := @projT1 _ _ |}.
+Inductive finsat_sig' : what -> nat -> Type := | f : bool -> finsat_sig' func 1 | e : finsat_sig' func 0 | dum : finsat_sig' func 0 | P : finsat_sig' pred 2 | less : finsat_sig' pred 2 | equiv : finsat_sig' pred 2.
+Instance finsat_sig : Signature := make_sig finsat_sig'.
+Definition i_f domain {I : interp domain} : bool -> domain -> domain := fun b x => (FullTarski.i_f (f := existT _ 1 (f b))) (Vector.cons x Vector.nil).
+Definition i_e domain {I : interp domain} : domain := (FullTarski.i_f (f := existT _ 0 e)) Vector.nil.
+Definition i_P domain {I : interp domain} : domain -> domain -> Prop := fun x y => (FullTarski.i_P (P := existT _ 2 P)) (Vector.cons x (Vector.cons y Vector.nil)).
+Notation i_equiv x y := ((FullTarski.i_P (P := existT _ 2 equiv)) (Vector.cons x (Vector.cons y Vector.nil))).
+Fixpoint iprep domain {I : interp domain} (x : list bool) (y : domain) := match x with | nil => y | b::x => i_f b (iprep x y) end.
+Definition ienc domain {I : interp domain} (x : list bool) := iprep x i_e.
+Local Definition BSRS := list (card bool).
+Local Notation "x / y" := (x, y).
+Section FIB.
+Variable R : BSRS.
+Definition obstring n := option (bstring n).
+Notation obcast H := (Some (bcast H)).
+Definition ccons n b (s : obstring n) : obstring n := match s with | Some (exist _ s _) => match (le_dec (|b::s|) n) with | left H => obcast H | right _ => None end | None => None end.
+Definition cdrv n (s t : obstring n) := match s, t with | Some (exist _ s _), Some (exist _ t _) => derivable R s t | _, _ => False end.
+Definition sub n (x y : obstring n) := match x, y with | Some (exist _ s _), Some (exist _ t _) => s <> t /\ exists s', t = s'++s | _, _ => False end.
+Global Instance FIB n : interp (obstring n).
+Proof.
+split.
+-
+intros [k H]; cbn.
+inversion H; subst.
++
+intros v.
+exact (ccons H0 (Vector.hd v)).
++
+intros _.
+exact (Some (bnil n)).
++
+intros _.
+exact None.
+-
+intros [k H]; cbn.
+inversion H; subst.
++
+intros v.
+exact (cdrv (Vector.hd v) (Vector.hd (Vector.tl v))).
++
+intros v.
+exact (sub (Vector.hd v) (Vector.hd (Vector.tl v))).
++
+intros v.
+exact (eq (Vector.hd v) (Vector.hd (Vector.tl v))).
+Defined.
+Definition obembed n (s : obstring n) : obstring (S n) := match s with | Some (exist _ s H) => Some (exist _ s (le_S _ _ H)) | None => None end.
+Section Ax.
+Variable n : nat.
+Implicit Type x y : obstring n.
+End Ax.
+End FIB.
+Section Conv.
+Variable R : BSRS.
+Variable D : Type.
+Hypothesis HD : listable D.
+Variable I : interp D.
+Notation sub x y := ((FullTarski.i_P (P := existT _ 2 less)) (Vector.cons x (Vector.cons y Vector.nil))).
+Notation dum := ((FullTarski.i_f (f := existT _ 0 dum)) Vector.nil).
+Hypothesis HP : forall x y, i_P x y -> x <> dum /\ y <> dum.
+Hypothesis HS1 : forall x, ~ sub x x.
+Hypothesis HS2 : forall x y z, sub x y -> sub y z -> sub x z.
+Hypothesis HF1 : forall b x, i_f b x <> i_e.
+Hypothesis HF2 : forall b1 b2 x y, i_f b1 x <> dum -> i_f b1 x = i_f b2 y -> x = y /\ b1 = b2.
+Hypothesis HF3 : forall b x, i_f b x <> dum -> x <> dum.
+Hypothesis HI : forall x y, i_P x y -> (exists s t, s/t el R /\ x = ienc s /\ y = ienc t) \/ (exists s t u v, s/t el R /\ x = iprep s u /\ y = iprep t v /\ i_P u v /\ ((sub u x /\ v = y) \/ (sub v y /\ u = x) \/ (sub u x /\ sub v y))).
+Definition sub' L x y := sub x y /\ x el L.
+Inductive psub : (D * D) -> (D * D) -> Prop := | psub1 x u : sub u x -> forall y, psub (u,y) (x,y) | psub2 y u : sub u y -> forall x, psub (x,u) (x,y) | psub3 x y u v : sub u x -> sub v y -> psub (u,v) (x,y).
+End Conv.
+Definition finsat phi := exists D (I : interp D) rho, listable D /\ (forall x y, i_equiv x y <-> eq x y) /\ rho ⊨ phi.
+Section Reduction.
+Notation "# x" := (var_term x) (at level 2).
+Definition t_f b x := Func (existT _ 1 (f b)) (Vector.cons x Vector.nil).
+Definition t_e := Func (existT _ 0 e) Vector.nil.
+Definition t_dum := Func (existT _ 0 dum) Vector.nil.
+Definition f_P x y := Pred (existT _ 2 P) (Vector.cons x (Vector.cons y Vector.nil)).
+Notation "x ≡ y" := (Pred (existT _ 2 equiv) (Vector.cons x (Vector.cons y Vector.nil))) (at level 20).
+Notation "x ≢ y" := (¬ (x ≡ y)) (at level 20).
+Notation "x ≺ y" := (Pred (existT _ 2 less) (Vector.cons x (Vector.cons y Vector.nil))) (at level 20).
+Fixpoint tprep (x : list bool) (y : term) := match x with | nil => y | b::x => t_f b (tprep x y) end.
+Definition tenc (x : list bool) := tprep x t_e.
+Definition ax_P := ∀ ∀ f_P #1 #0 --> (#1 ≢ t_dum) ∧ (#0 ≢ t_dum).
+Definition ax_S1 := ∀ ¬ (#0 ≺ #0).
+Definition ax_S2 := ∀ ∀ ∀ #2 ≺ #1 --> #1 ≺ #0 --> #2 ≺ #0.
+Definition ax_HF1_true := ∀ t_f true #0 ≢ t_e.
+Definition ax_HF1_false := ∀ t_f false #0 ≢ t_e.
+Definition ax_HF2_true := ∀ ∀ t_f true #1 ≢ t_dum --> t_f true #1 ≡ t_f true #0 --> #1 ≡ #0.
+Definition ax_HF2_false := ∀ ∀ t_f false #1 ≢ t_dum --> t_f false #1 ≡ t_f false #0 --> #1 ≡ #0.
+Definition ax_HF2 := ∀ ∀ t_f true #1 ≡ t_f false #0 --> (t_f true #1 ≡ t_dum ∧ t_f false #0 ≡ t_dum).
+Definition ax_HF3_true := ∀ t_f true #0 ≢ t_dum --> #0 ≢ t_dum.
+Definition ax_HF3_false := ∀ t_f false #0 ≢ t_dum --> #0 ≢ t_dum.
+Definition ax_HI' c := (#1 ≡ tenc (fst c) ∧ #0 ≡ tenc (snd c)) ∨ (∃ ∃ #3 ≡ tprep (fst c) #1 ∧ #2 ≡ tprep (snd c) #0 ∧ f_P #1 #0 ∧ ((#1 ≺ #3 ∧ #0 ≡ #2) ∨ (#0 ≺ #2 ∧ #1 ≡ #3) ∨ (#1 ≺ #3 ∧ #0 ≺ #2))).
+Definition ax_HI (R : BSRS) := ∀ ∀ f_P #1 #0 --> list_or (map ax_HI' R).
+Definition finsat_formula (R : BSRS) := ax_P ∧ ax_S1 ∧ ax_S2 ∧ ax_HF1_true ∧ ax_HF1_false ∧ ax_HF2_true ∧ ax_HF2_false ∧ ax_HF2 ∧ ax_HF3_true ∧ ax_HF3_false ∧ ax_HI R ∧ ∃ f_P #0 #0.
+End Reduction.
+
+Lemma crdv_iff n (x y : obstring n) : i_P x y <-> exists s t, derivable R s t /\ x = ienc s /\ y = ienc t /\ |s| <= n /\ |t| <= n.
+Proof.
+destruct x as [ [x HX]|], y as [ [y HY]|]; split; cbn; auto.
+{
+intros H.
+exists x, y.
+repeat setoid_rewrite obstring_ienc.
+now repeat split.
+}
+all: intros (s&t&H1&H2&H3&H4&H5).
+all: try unshelve setoid_rewrite obstring_ienc in H2; try unshelve setoid_rewrite obstring_ienc in H3; auto.
+all: try discriminate.
+depelim H2.
+depelim H3.
+Admitted.
+
+Lemma cdrv_mon n (s t : obstring n) : cdrv s t -> @cdrv (S n) (obembed s) (obembed t).
+Proof.
+Admitted.
+
+Lemma cdrv_mon' n s t : @cdrv n (ienc s) (ienc t) -> @cdrv (S n) (ienc s) (ienc t).
+Proof.
+destruct (le_dec (|s|) n) as [H|H], (le_dec (|t|) n) as [H'|H'].
+-
+repeat unshelve setoid_rewrite obstring_ienc; trivial; lia.
+-
+setoid_rewrite (obstring_ienc H).
+setoid_rewrite (obstring_ienc' H').
+cbn.
+tauto.
+-
+rewrite (obstring_ienc' H).
+cbn.
+tauto.
+-
+rewrite (obstring_ienc' H).
+cbn.
+Admitted.
+
+Lemma drv_cdrv s t : derivable R s t <-> @cdrv (max (|s|) (|t|)) (ienc s) (ienc t).
+Proof.
+Admitted.
+
+Lemma drv_cdrv' s : derivable R s s <-> @cdrv (|s|) (ienc s) (ienc s).
+Proof.
+Admitted.
+
+Lemma BPCP_P : dPCPb R <-> exists n x, @i_P _ (FIB n) x x.
+Proof.
+split.
+-
+intros [s H].
+exists (|s|), (ienc s).
+cbn.
+now apply drv_cdrv'.
+-
+intros [n[ [ [s H]|] H'] ].
++
+cbn in H'.
+now exists s.
++
+Admitted.
+
+Lemma app_eq_nil' (s t : string bool) : s = t++s -> t = nil.
+Proof.
+destruct t; trivial.
+intros H.
+exfalso.
+assert (H' : |s| = |(b :: t) ++ s|) by now rewrite H at 1.
+cbn in H'.
+rewrite app_length in H'.
+Admitted.
+
+Lemma app_neq b (s t : string bool) : s <> (b :: t) ++ s.
+Proof.
+intros H.
+apply app_eq_nil' in H.
+Admitted.
+
+Lemma FIB_HP x y : i_P x y -> x <> None /\ y <> None.
+Proof.
+destruct x as [ [s HS] |], y as [ [t HT]|]; auto.
+intros _.
+Admitted.
+
+Lemma FIB_HS1 x : ~ sub x x.
+Proof.
+Admitted.
+
+Lemma FIB_HF1 b x : i_f b x <> i_e.
+Proof.
+destruct x as [ [s H]|]; cbn; try congruence.
+destruct le_dec; try congruence.
+injection.
+Admitted.
+
+Lemma FIB_HF2 b1 b2 x y : i_f b1 x <> None -> i_f b1 x = i_f b2 y -> x = y /\ b1 = b2.
+Proof.
+destruct x as [ [s HS] |], y as [ [t HT]|]; cbn.
+all: repeat destruct le_dec; cbn.
+all: try congruence.
+intros _ H.
+depelim H.
+split; trivial.
+f_equal.
+Admitted.
+
+Lemma None_dec X (x : option X) : {x = None} + {x <> None}.
+Proof.
+destruct x; auto.
+right.
+Admitted.
+
+Lemma FIB_HF2' x y : i_f true x = i_f false y -> i_f true x = None /\ i_f false y = None.
+Proof.
+intros H.
+destruct (None_dec (i_f true x)), (None_dec (i_f false y)); try tauto; exfalso.
+-
+symmetry in H.
+specialize (FIB_HF2 n0 H).
+congruence.
+-
+specialize (FIB_HF2 n0 H).
+congruence.
+-
+specialize (FIB_HF2 n0 H).
+intros [_ H'].
+Admitted.
+
+Lemma FIB_HF3 b x : i_f b x <> None -> x <> None.
+Proof.
+Admitted.
+
+Lemma FIB_HI x y : i_P x y -> (exists s t, s/t el R /\ x = ienc s /\ y = ienc t) \/ (exists s t u v, s/t el R /\ x = iprep s u /\ y = iprep t v /\ i_P u v /\ ((sub u x /\ v = y) \/ (sub v y /\ u = x) \/ (sub u x /\ sub v y))).
+Proof.
+destruct x as [ [x HX]|], y as [ [y HY]|]; cbn; auto.
+induction 1.
+-
+left.
+exists x, y.
+repeat setoid_rewrite obstring_ienc.
+repeat split; trivial.
+-
+assert (HU : |u| <= n).
+{
+rewrite app_length in HX.
+lia.
+}
+assert (HV : |v| <= n).
+{
+rewrite app_length in HY.
+lia.
+}
+destruct x as [|b x], y as [|c y].
++
+cbn.
+apply IHderivable.
++
+right.
+exists [], (c::y), (obcast HU), (obcast HV).
+repeat setoid_rewrite obstring_iprep.
+repeat split; trivial.
+right.
+left.
+repeat split; eauto using app_neq.
+f_equal.
+now apply bstring_eq.
++
+right.
+exists (b::x), [], (obcast HU), (obcast HV).
+repeat setoid_rewrite obstring_iprep.
+repeat split; trivial.
+left.
+repeat split; eauto using app_neq.
+f_equal.
+now apply bstring_eq.
++
+right.
+exists (b::x), (c::y), (obcast HU), (obcast HV).
+repeat setoid_rewrite obstring_iprep.
+repeat split; trivial.
+right.
+right.
+Admitted.
+
+Lemma ienc_inj s t : ienc s <> dum -> ienc s = ienc t -> s = t.
+Proof.
+revert t.
+induction s; intros [|]; cbn; trivial.
+-
+intros _ H.
+symmetry in H.
+now apply HF1 in H.
+-
+intros _ H.
+now apply HF1 in H.
+-
+intros H [H' ->] % HF2; trivial.
+f_equal.
+apply IHs; trivial.
+Admitted.
+
+Lemma sub_acc_pred L x y : sub y x -> Acc (sub' L) x -> Acc (sub' L) y.
+Proof.
+intros H H'.
+constructor.
+intros z [H1 H2].
+apply H'.
+split; trivial.
+Admitted.
+
+Lemma sub_acc_cons L x y : Acc (sub' L) x -> ~ sub y x -> Acc (sub' (y::L)) x.
+Proof.
+induction 1 as [x HX IH].
+intros H.
+constructor.
+intros z [H1[->|H2] ].
+-
+contradiction.
+-
+Admitted.
+
+Lemma sub_acc_cons' L x y : sub y x -> Acc (sub' L) x -> Acc (sub' (y::L)) y.
+Proof.
+intros H1 H2.
+apply sub_acc_cons; trivial.
+Admitted.
+
+Lemma FIB_HS2 x y z : sub x y -> sub y z -> sub x z.
+Proof.
+destruct x as [ [s HS]|], y as [ [t HT]|], z as [ [u HU]|]; cbn; auto.
+intros [H1[s' HS'] ] [H2[t' HT'] ].
+subst.
+split.
+-
+rewrite app_assoc.
+intros H % app_eq_nil'.
+apply app_eq_nil in H as [-> ->].
+now apply H1.
+-
+exists (t'++s').
+apply app_assoc.

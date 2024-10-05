@@ -1,0 +1,120 @@
+Set Implicit Arguments.
+Require Import List Arith Lia Morphisms FinFun Init.Wf.
+From Undecidability.HOU Require Import std.decidable.
+Import ListNotations.
+Set Default Proof Using "Type".
+Arguments incl {_} _ _.
+Definition seteq {X: Type} (A B: list X) := incl A B /\ incl B A.
+Definition strict_incl {X: Type} (A B: list X) := incl A B /\ exists x, In x B /\ ~ In x A.
+Notation "a ∈ A" := (In a A) (at level 70).
+Notation "A ⊆ B" := (incl A B) (at level 70).
+Notation "A ⊊ B" := (strict_incl A B) (at level 70).
+Notation "A === B" := (seteq A B) (at level 70).
+Notation "| A |" := (length A) (at level 65).
+Section BasicLemmas.
+Variable X Y: Type.
+Implicit Type f: X -> Y.
+Implicit Type p: X -> bool.
+Implicit Type A B C : list X.
+Implicit Type a b c : X.
+Global Instance incl_preorder: PreOrder (@incl X).
+Proof.
+firstorder.
+Global Instance strict_incl_transitive: Transitive (@strict_incl X).
+Proof.
+firstorder.
+Global Instance seteq_preorder: PreOrder (@seteq X).
+Proof.
+firstorder.
+Global Instance seteq_equivalence: Equivalence (@seteq X).
+Proof.
+firstorder.
+Hint Resolve incl_refl seteq_refl : listdb.
+Global Instance proper_in_incl: Proper (eq ++> incl ==> Basics.impl) (@In X).
+Proof.
+intros ?? -> ???.
+firstorder.
+Global Instance in_seteq_proper: Proper (eq ++> seteq ++> iff) (@In X).
+Proof.
+intros ?? -> ???.
+firstorder.
+Global Instance subrel_incl_seteq: subrelation seteq (@incl X).
+Proof.
+intros ??; firstorder.
+Global Instance incl_seteq_proper: Proper (seteq ++> seteq ++> iff) (@incl X).
+Proof.
+firstorder.
+Global Instance incl_cons_proper: Proper (eq ++> incl ++> incl) (@cons X).
+Proof.
+intros ??-> ???; firstorder.
+Global Instance seteq_cons_proper: Proper (eq ++> seteq ++> seteq) (@cons X).
+Proof.
+intros ??-> ???; firstorder.
+Hint Resolve incl_seteq seteq_incl_left seteq_incl_right incl_nil incl_cons incl_cons_build incl_cons_project_l incl_cons_project_r incl_cons_drop incl_filter incl_distr_left incl_distr_right incl_app_project_left incl_app_project_right incl_app_build : listdb.
+Global Instance strict_incl_incl_subrel: subrelation (@strict_incl X) (@incl X).
+Proof.
+firstorder.
+Section WellFoundedStrictInclusion.
+Context {D: Dis X}.
+End WellFoundedStrictInclusion.
+Global Instance proper_app_incl: Proper (incl ++> incl ++> incl) (@app X).
+Proof.
+intros A A' H1 B B' H2; induction A; firstorder auto with *.
+Global Instance proper_app_seteq: Proper (seteq ++> seteq ++> seteq) (@app X).
+Proof.
+intros A A' [H1 H2] B B' [H3 H4].
+split; eapply proper_app_incl; firstorder.
+Hint Rewrite app_nil_l app_nil_r : listdb.
+Hint Rewrite <- app_comm_cons : listdb.
+Hint Rewrite -> in_app_iff : listdb.
+Global Instance proper_incl_seteq: Proper (@seteq X ++> @seteq X ++> iff) incl.
+Proof.
+intros ??????; firstorder.
+Global Instance proper_rev_incl: Proper (incl ++> incl) (@rev X).
+Proof.
+intros A B H.
+now rewrite rev_seteq, H, rev_seteq.
+Global Instance proper_rev_seteq: Proper (seteq ++> seteq) (@rev X).
+Proof.
+intros A B [H1 H2]; split; eapply proper_rev_incl; eauto.
+Hint Rewrite rev_seteq rev_involutive rev_length rev_app_distr : listdb.
+Global Instance map_incl_proper : Proper (eq ++> incl ++> incl) (@map Y X).
+Proof.
+intros ?? -> A B H.
+induction A; cbn; eauto with listdb.
+eapply incl_cons_build; firstorder.
+eapply in_map; firstorder.
+Global Instance map_seteq_proper : Proper (eq ++> seteq ++> seteq) (@map Y X).
+Proof.
+intros ?? -> A B [H1 H2]; split; apply map_incl_proper; firstorder.
+Hint Rewrite map_id map_rev map_nil map_cons map_app map_length : listdb.
+Hint Resolve in_map : listdb.
+Hint Rewrite app_length map_length rev_length : listdb.
+Global Instance filter_incl_proper: Proper (eq ++> incl ++> incl) (@filter X).
+Proof.
+intros ?? -> A B H2; induction A; cbn; eauto with listdb.
+destruct y eqn: H1; eauto with listdb.
+eapply incl_cons_build; eauto with listdb.
+eapply filter_In; intuition.
+Global Instance filter_seqteq_proper: Proper (eq ++> seteq ++> seteq) (@filter X).
+Proof.
+intros f g -> A B [H2 H3]; split; apply filter_incl_proper; firstorder.
+End BasicLemmas.
+Hint Resolve incl_refl seteq_refl : listdb.
+Hint Resolve incl_seteq seteq_incl_left seteq_incl_right incl_nil incl_cons incl_cons_build incl_cons_project_l incl_cons_project_r incl_cons_drop incl_filter incl_distr_left incl_distr_right incl_app_project_left incl_app_project_right incl_app_build : listdb.
+Hint Rewrite -> in_app_iff : listdb.
+Hint Rewrite <- app_comm_cons : listdb.
+Hint Rewrite app_nil_l app_nil_r : listdb.
+Hint Rewrite rev_seteq rev_involutive rev_length rev_app_distr : listdb.
+Hint Rewrite map_id map_rev map_nil map_cons map_app : listdb.
+Hint Resolve in_map : listdb.
+Hint Rewrite app_length map_length rev_length : listdb.
+Hint Extern 4 => match goal with |[ H: ?x ∈ nil |- _ ] => destruct H end : core.
+Ltac lsimpl := autorewrite with listdb.
+Tactic Notation "lsimpl" "in" hyp_list(H) := autorewrite with listdb in H.
+Tactic Notation "lsimpl" "in" "*" := autorewrite with listdb in *.
+Ltac lauto := eauto with listdb.
+
+Lemma incl_seteq A B: A ⊆ B -> B ⊆ A -> A === B.
+Proof.
+firstorder.

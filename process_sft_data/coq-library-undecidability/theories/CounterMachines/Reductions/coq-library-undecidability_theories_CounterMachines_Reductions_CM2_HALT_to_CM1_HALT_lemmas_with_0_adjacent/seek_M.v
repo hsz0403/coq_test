@@ -1,0 +1,50 @@
+Require Import List PeanoNat Lia.
+Import ListNotations.
+Require Undecidability.CounterMachines.CM2.
+Require Undecidability.CounterMachines.CM1.
+Import CM2 (CM2_HALT).
+Import CM1 (CM1_HALT).
+From Undecidability.CounterMachines.Util Require Import Nat_facts List_facts.
+From Undecidability.CounterMachines.Util Require CM1_facts CM2_facts.
+Require Import ssreflect ssrbool ssrfun.
+Set Default Proof Using "Type".
+Set Default Goal Selector "!".
+Module Argument.
+Import CM2 (Cm2).
+Import CM1 (Cm1).
+Section MM2_CM1.
+Variable (P: Cm2).
+Definition fs (i: nat) : CM1.State := i*6.
+Definition encode_instruction : CM2.Instruction * nat -> list CM1.Instruction := fun '(cm2i, i) => let p := fs i in match cm2i with | CM2.inc false => [(fs (1+i), 0)] ++ (* 2/1, goto i+1 *) [(0, 0); (0, 0); (0, 0); (0, 0); (0, 0)] (* filler *) | CM2.inc true => [(1+p, 0); (fs (1+i), 1)] ++ (* 2/1; 3/2, goto i+1 *) [(0, 0); (0, 0); (0, 0); (0, 0)] (* filler *) | CM2.dec false j => [(4+p, 1)] ++ (* 3/2 *) [(2+p, 0); (3+p, 0); (fs (1+i), 3)] ++ (* fail: 2/1; 2/1; 5/4 goto i+1 *) [(5+p, 2); (fs j, 3)] (* success: 4/3; 5/4 goto j *) | CM2.dec true j => [(4+p, 2)] ++ (* 4/3 *) [(2+p, 0); (3+p, 0); (fs (1+i), 3)] ++ (* fail: 2/1; 2/1; 5/4 goto i+1 *) [(fs j, 3)] ++ (* success: 5/4 goto j *) [(0, 0)] (* filler *) end.
+Local Arguments encode_instruction : simpl never.
+Definition M : list CM1.Instruction := flat_map encode_instruction (combine P (seq 0 (length P))).
+Definition κ (a b c: nat) : nat := 2 ^ a * 3 ^ b * 5 ^ c.
+Definition encodes_config (x: CM2.Config) (y: CM1.Config) : Prop := CM1.state y = fs (CM2.state x) /\ exists n, CM1.value y = κ (CM2.value1 x) (CM2.value2 x) n.
+Local Arguments encodes_config !x !y /.
+Arguments nth_error : simpl never.
+Arguments Nat.div : simpl never.
+Arguments Nat.modulo : simpl never.
+Definition κ_norm := (@κ_pos, @κ_21, @κ_32, @κ_43, @κ_54, @κ_mod2, @κ_mod3, @κ_mod4).
+End MM2_CM1.
+End Argument.
+Require Import Undecidability.Synthetic.Definitions.
+
+Lemma seek_M n {i} : nth_error M (n + fs i) = match n with | 0 | 1 | 2 | 3 | 4 | 5 => obind (fun cm2i => nth_error (encode_instruction (cm2i, i)) n) (nth_error P i) | _ => nth_error M (n + fs i) end.
+Proof.
+rewrite /M.
+suff : n < 6 -> forall k, nth_error (flat_map encode_instruction (combine P (seq k (length P)))) (n + fs i) = obind (fun cm2i : CM2.Instruction => nth_error (encode_instruction (cm2i, k + i)) n) (nth_error P i).
+{
+move: n => [|[|[|[|[|[|?]]]]]]; last done.
+all: apply; by lia.
+}
+move=> Hn.
+elim: (P) i; first by move: n {Hn} => [|?] [|?] /=.
+move=> cm2i P' IH [|i] k /=.
+-
+by rewrite /fs ?Nat.add_0_r nth_error_app1 ?length_encode_instruction.
+-
+rewrite nth_error_app2 ?length_encode_instruction; first by (rewrite /fs; lia).
+have ->: n + fs (S i) - 6 = n + fs i by (rewrite /fs; lia).
+rewrite IH.
+move: (nth_error P' i) => [? /= |]; last done.
+by have ->: S (k + i) = k + S i by lia.

@@ -1,0 +1,646 @@
+Require Import Ensembles.
+Require Import Coq.Lists.List.
+Require Import Arith.
+Require Import Peano_dec.
+Require Import ListExt.
+Require Import Max.
+Require Import folProof.
+Require Import folLogic2.
+Require Import folProp.
+Require Import folReplace.
+Require Import subProp.
+Section SubAllVars.
+Variable L : Language.
+Notation Formula := (Formula L) (only parsing).
+Notation Formulas := (Formulas L) (only parsing).
+Notation System := (System L) (only parsing).
+Notation Term := (Term L) (only parsing).
+Notation Terms := (Terms L) (only parsing).
+Notation var := (var L) (only parsing).
+Notation apply := (apply L) (only parsing).
+Notation equal := (equal L) (only parsing).
+Notation atomic := (atomic L) (only parsing).
+Notation impH := (impH L) (only parsing).
+Notation notH := (notH L) (only parsing).
+Notation forallH := (forallH L) (only parsing).
+Notation iffH := (iffH L) (only parsing).
+Notation SysPrf := (SysPrf L) (only parsing).
+Fixpoint subAllTerm (t : fol.Term L) : (nat -> fol.Term L) -> fol.Term L := match t return ((nat -> fol.Term L) -> fol.Term L) with | fol.var x => fun m => m x | fol.apply f ts => fun m => fol.apply L f (subAllTerms _ ts m) end with subAllTerms (n : nat) (ts : fol.Terms L n) {struct ts} : (nat -> fol.Term L) -> fol.Terms L n := match ts in (fol.Terms _ n) return ((nat -> fol.Term L) -> fol.Terms L n) with | Tnil => fun _ => Tnil L | Tcons n' t ss => fun m => Tcons L n' (subAllTerm t m) (subAllTerms _ ss m) end.
+Fixpoint freeVarMap (l : list nat) : (nat -> fol.Term L) -> list nat := match l with | nil => fun _ => nil | a :: l' => fun m => freeVarTerm L (m a) ++ freeVarMap l' m end.
+Fixpoint subAllFormula (f : Formula) (m : (nat -> Term)) {struct f} : Formula := match f with | fol.equal t s => equal (subAllTerm t m) (subAllTerm s m) | fol.atomic r ts => atomic r (subAllTerms _ ts m) | fol.impH f g => impH (subAllFormula f m) (subAllFormula g m) | fol.notH f => notH (subAllFormula f m) | fol.forallH n f => let nv := newVar (freeVarFormula L f ++ freeVarMap (freeVarFormula L (forallH n f)) m) in forallH nv (subAllFormula f (fun v : nat => match eq_nat_dec v n with | left _ => var nv | right _ => m v end)) end.
+Section subAllCloseFrom.
+Fixpoint closeFrom (a n : nat) (f : fol.Formula L) {struct n} : fol.Formula L := match n with | O => f | S m => fol.forallH L (a + m) (closeFrom a m f) end.
+Opaque le_lt_dec.
+End subAllCloseFrom.
+End SubAllVars.
+
+Lemma subAllTermsId : forall (n : nat) (ts : fol.Terms L n), subAllTerms n ts (fun x : nat => fol.var L x) = ts.
+Proof.
+intros.
+induction ts as [| n t ts Hrects].
+reflexivity.
+simpl in |- *.
+rewrite Hrects.
+rewrite subAllTermId.
+Admitted.
+
+Lemma subAllFormulaId : forall (T : fol.System L) (f : fol.Formula L), folProof.SysPrf L T (fol.iffH L (subAllFormula f (fun x : nat => fol.var L x)) f).
+Proof.
+intros.
+apply (sysExtend L) with (Empty_set (fol.Formula L)).
+unfold Included in |- *.
+intros.
+induction H.
+induction f as [t t0| r t| f1 Hrecf1 f0 Hrecf0| f Hrecf| n f Hrecf]; simpl in |- *.
+repeat rewrite subAllTermId.
+apply (iffRefl L).
+rewrite subAllTermsId.
+apply (iffRefl L).
+apply (reduceImp L).
+apply Hrecf1.
+apply Hrecf0.
+apply (reduceNot L).
+apply Hrecf.
+set (nv := newVar (freeVarFormula L f ++ freeVarMap (list_remove nat eq_nat_dec n (freeVarFormula L f)) (fun x : nat => fol.var L x))) in *.
+apply (iffTrans L) with (fol.forallH L n (subAllFormula f (fun x : nat => fol.var L x))).
+apply (iffTrans L) with (fol.forallH L nv (substituteFormula L (subAllFormula f (fun x : nat => fol.var L x)) n (fol.var L nv))).
+replace (subAllFormula f (fun v : nat => match eq_nat_dec v n with | left _ => fol.var L nv | right _ => fol.var L v end)) with (subAllFormula f (fun x : nat => substituteTerm L (fol.var L x) n (fol.var L nv))).
+apply (reduceForall L).
+apply (notInFreeVarSys L).
+apply (iffSym L).
+apply subSubAllFormula with (m := fun x : nat => fol.var L x).
+apply subAllFormula_ext.
+intros.
+simpl in |- *.
+induction (eq_nat_dec n m); induction (eq_nat_dec m n); reflexivity || (elimtype False; auto).
+apply (iffSym L).
+apply (rebindForall L).
+unfold not in |- *; intros.
+assert (In nv (freeVarFormula L (subAllFormula f (fun x : nat => fol.var L x)))).
+eapply In_list_remove1.
+apply H.
+decompose record (freeVarSubAllFormula1 _ _ _ H0).
+elim (newVar1 (freeVarFormula L f ++ freeVarMap (list_remove nat eq_nat_dec n (freeVarFormula L f)) (fun x : nat => fol.var L x))).
+fold nv in |- *.
+apply in_or_app.
+right.
+eapply freeVarMap1.
+apply H3.
+apply In_list_remove3.
+apply H2.
+induction H3 as [H1| H1].
+rewrite H1.
+eapply In_list_remove2.
+apply H.
+contradiction.
+apply (reduceForall L).
+apply (notInFreeVarSys L).
+Admitted.
+
+Lemma subAllSubAllTerm : forall (t : fol.Term L) (m1 m2 : nat -> fol.Term L), subAllTerm (subAllTerm t m1) m2 = subAllTerm t (fun n : nat => subAllTerm (m1 n) m2).
+Proof.
+intro.
+elim t using Term_Terms_ind with (P0 := fun (n : nat) (ts : fol.Terms L n) => forall m1 m2 : nat -> fol.Term L, subAllTerms n (subAllTerms n ts m1) m2 = subAllTerms n ts (fun n : nat => subAllTerm (m1 n) m2)); simpl in |- *; intros.
+reflexivity.
+rewrite H.
+reflexivity.
+reflexivity.
+rewrite H.
+rewrite H0.
+Admitted.
+
+Lemma subAllSubAllTerms : forall (n : nat) (ts : fol.Terms L n) (m1 m2 : nat -> fol.Term L), subAllTerms n (subAllTerms n ts m1) m2 = subAllTerms n ts (fun n : nat => subAllTerm (m1 n) m2).
+Proof.
+intros.
+induction ts as [| n t ts Hrects]; simpl in |- *.
+reflexivity.
+rewrite Hrects.
+rewrite subAllSubAllTerm.
+Admitted.
+
+Lemma subAllSubAllFormula : forall (T : fol.System L) (f : fol.Formula L) (m1 m2 : nat -> fol.Term L), folProof.SysPrf L T (fol.iffH L (subAllFormula (subAllFormula f m1) m2) (subAllFormula f (fun n : nat => subAllTerm (m1 n) m2))).
+Proof.
+intros T f.
+generalize f T.
+clear f T.
+intro f.
+induction f as [t t0| r t| f1 Hrecf1 f0 Hrecf0| f Hrecf| n f Hrecf]; intros.
+simpl in |- *.
+repeat rewrite subAllSubAllTerm.
+apply (iffRefl L).
+simpl in |- *.
+rewrite subAllSubAllTerms.
+apply (iffRefl L).
+simpl in |- *.
+apply (reduceImp L).
+apply Hrecf1.
+apply Hrecf0.
+simpl in |- *.
+apply (reduceNot L).
+apply Hrecf.
+simpl in |- *.
+set (nv1 := freeVarFormula L f ++ freeVarMap (list_remove nat eq_nat_dec n (freeVarFormula L f)) m1) in *.
+set (nv2 := freeVarFormula L f ++ freeVarMap (list_remove nat eq_nat_dec n (freeVarFormula L f)) (fun n0 : nat => subAllTerm (m1 n0) m2)) in *.
+set (nv3 := freeVarFormula L (subAllFormula f (fun v : nat => match eq_nat_dec v n with | left _ => fol.var L (newVar nv1) | right _ => m1 v end)) ++ freeVarMap (list_remove nat eq_nat_dec (newVar nv1) (freeVarFormula L (subAllFormula f (fun v : nat => match eq_nat_dec v n with | left _ => fol.var L (newVar nv1) | right _ => m1 v end)))) m2) in *.
+apply (iffTrans L) with (fol.forallH L (newVar nv3) (substituteFormula L (subAllFormula f (fun v : nat => match eq_nat_dec v n with | left _ => fol.var L (newVar nv2) | right _ => subAllTerm (m1 v) m2 end)) (newVar nv2) (fol.var L (newVar nv3)))).
+eapply (sysExtend L) with (Empty_set (fol.Formula L)).
+unfold Included in |- *.
+intros.
+induction H.
+apply (reduceForall L).
+apply (notInFreeVarSys L).
+eapply (iffTrans L).
+apply Hrecf.
+set (a1 := fun v : nat => match eq_nat_dec v n with | left _ => fol.var L (newVar nv2) | right _ => subAllTerm (m1 v) m2 end) in *.
+simpl in |- *.
+set (a2 := fun n0 : nat => subAllTerm match eq_nat_dec n0 n with | left _ => fol.var L (newVar nv1) | right _ => m1 n0 end (fun v : nat => match eq_nat_dec v (newVar nv1) with | left _ => fol.var L (newVar nv3) | right _ => m2 v end)) in *.
+replace (subAllFormula f a2) with (subAllFormula f (fun x : nat => substituteTerm L (a1 x) (newVar nv2) (fol.var L (newVar nv3)))).
+apply (iffSym L).
+apply subSubAllFormula.
+apply subAllFormula_ext.
+intros.
+unfold a1, a2 in |- *.
+induction (eq_nat_dec m n).
+rewrite (subTermVar1 L).
+simpl in |- *.
+induction (eq_nat_dec (newVar nv1) (newVar nv1)).
+reflexivity.
+elim b.
+auto.
+rewrite subSubAllTerm.
+apply subAllTerm_ext.
+intros.
+induction (eq_nat_dec m0 (newVar nv1)).
+elim (newVar1 nv1).
+rewrite <- a.
+unfold nv1 in |- *.
+apply in_or_app.
+right.
+eapply freeVarMap1.
+apply H0.
+apply In_list_remove3; auto.
+apply (subTermNil L).
+unfold not in |- *; intros.
+elim (newVar1 nv2).
+unfold nv2 at 2 in |- *.
+apply in_or_app.
+right.
+eapply freeVarMap1.
+eapply freeVarSubAllTerm2.
+apply H0.
+apply H1.
+apply In_list_remove3; auto.
+apply (iffSym L).
+apply (rebindForall L).
+unfold not in |- *; intros.
+assert (In (newVar nv3) (freeVarFormula L (subAllFormula f (fun v : nat => match eq_nat_dec v n with | left _ => fol.var L (newVar nv2) | right _ => subAllTerm (m1 v) m2 end)))).
+eapply In_list_remove1.
+apply H.
+decompose record (freeVarSubAllFormula1 _ _ _ H0).
+induction (eq_nat_dec x n).
+induction H3 as [H1| H1].
+elim (In_list_remove2 _ _ _ _ _ H).
+auto.
+contradiction.
+decompose record (freeVarSubAllTerm1 _ _ _ H3).
+elim (newVar1 nv3).
+unfold nv3 at 2 in |- *.
+apply in_or_app.
+right.
+eapply freeVarMap1.
+apply H5.
+apply In_list_remove3.
+eapply freeVarSubAllFormula2.
+apply H2.
+induction (eq_nat_dec x n).
+elim b.
+auto.
+auto.
+unfold not in |- *; intros.
+elim (newVar1 nv1).
+rewrite <- H1.
+unfold nv1 in |- *.
+apply in_or_app.
+right.
+eapply freeVarMap1.
+apply H4.
+Admitted.
+
+Lemma liftCloseFrom : forall (n : nat) (f : fol.Formula L) (T : fol.System L) (m : nat), (forall v : nat, In v (freeVarFormula L f) -> v < m) -> n <= m -> folProof.SysPrf L T (closeFrom 0 n f) -> folProof.SysPrf L T (closeFrom m n (subAllFormula f (fun x : nat => match le_lt_dec n x with | left _ => fol.var L x | right _ => fol.var L (m + x) end))).
+Proof.
+intro.
+induction n as [| n Hrecn]; simpl in |- *; intros.
+replace (subAllFormula f (fun x : nat => match le_lt_dec 0 x with | left _ => fol.var L x | right _ => fol.var L (m + x) end)) with (subAllFormula f (fun x : nat => fol.var L x)).
+apply (impE L) with f.
+apply (iffE2 L).
+apply subAllFormulaId.
+apply H1.
+apply subAllFormula_ext.
+intros.
+induction (le_lt_dec 0 m0).
+auto.
+elim (lt_n_O _ b).
+apply (impE L) with (fol.forallH L n (closeFrom 0 n f)).
+apply sysExtend with (Empty_set (fol.Formula L)).
+unfold Included in |- *.
+intros.
+induction H2.
+apply (impI L).
+apply (forallI L).
+unfold not in |- *; intros.
+induction H2 as (x, H2); induction H2 as (H2, H3).
+induction H3 as [x H3| x H3]; [ induction H3 | induction H3 ].
+assert (forall q : nat, n <= q -> m <= q -> ~ In q (freeVarFormula L (fol.forallH L n (closeFrom 0 n f)))).
+clear H2 H1 T Hrecn.
+induction n as [| n Hrecn]; simpl in |- *; unfold not in |- *; intros.
+elim (lt_not_le q m).
+apply H.
+eapply In_list_remove1.
+apply H3.
+auto.
+elim Hrecn with (q := q).
+apply le_S_n.
+apply le_S.
+auto.
+apply le_S_n.
+apply le_S.
+auto.
+auto.
+simpl in |- *.
+eapply In_list_remove1.
+apply H3.
+apply H3 with (q := m + n).
+apply le_plus_r.
+apply le_plus_l.
+apply H2.
+apply (impE L) with (closeFrom m n (substituteFormula L (subAllFormula f (fun x : nat => match le_lt_dec n x with | left _ => fol.var L x | right _ => fol.var L (m + x) end)) n (fol.var L (m + n)))).
+apply sysWeaken.
+clear H1 H T Hrecn.
+cut (folProof.SysPrf L (Empty_set (fol.Formula L)) (fol.impH L (substituteFormula L (subAllFormula f (fun x : nat => match le_lt_dec n x with | left _ => fol.var L x | right _ => fol.var L (m + x) end)) n (fol.var L (m + n))) (subAllFormula f (fun x : nat => match le_lt_dec (S n) x with | left _ => fol.var L x | right _ => fol.var L (m + x) end)))).
+generalize (substituteFormula L (subAllFormula f (fun x : nat => match le_lt_dec n x with | left _ => fol.var L x | right _ => fol.var L (m + x) end)) n (fol.var L (m + n))).
+generalize (subAllFormula f (fun x : nat => match le_lt_dec (S n) x with | left _ => fol.var L x | right _ => fol.var L (m + x) end)).
+clear f H0.
+intros.
+induction n as [| n Hrecn]; simpl in |- *.
+apply H.
+apply (impI L).
+apply (forallI L).
+unfold not in |- *; intros.
+induction H0 as (x, H0); induction H0 as (H0, H1).
+induction H1 as [x H1| x H1]; [ induction H1 | induction H1 ].
+elim (In_list_remove2 _ _ _ _ _ H0).
+auto.
+apply impE with (closeFrom m n f0).
+apply sysWeaken.
+apply Hrecn.
+eapply forallSimp.
+apply Axm; right; constructor.
+replace (subAllFormula f (fun x : nat => match le_lt_dec (S n) x with | left _ => fol.var L x | right _ => fol.var L (m + x) end)) with (subAllFormula f (fun x : nat => substituteTerm L match le_lt_dec n x with | left _ => fol.var L x | right _ => fol.var L (m + x) end n (fol.var L (m + n)))).
+apply (iffE1 L).
+apply subSubAllFormula with (m := fun x : nat => match le_lt_dec n x with | left _ => fol.var L x | right _ => fol.var L (m + x) end).
+apply subAllFormula_ext.
+intros.
+induction (le_lt_dec n m0).
+induction (le_lt_dec (S n) m0).
+apply (subTermVar2 L).
+unfold not in |- *; intros.
+elim (lt_not_le m0 (S m0)).
+apply lt_n_Sn.
+rewrite H1 in a0.
+auto.
+induction (le_lt_or_eq _ _ a).
+elim (lt_not_le m0 (S n)).
+auto.
+apply lt_n_Sm_le.
+apply lt_n_S.
+auto.
+rewrite H1.
+apply (subTermVar1 L).
+induction (le_lt_dec (S n) m0).
+elim (le_not_lt (S n) m0).
+auto.
+apply lt_S.
+auto.
+apply (subTermVar2 L).
+unfold not in |- *; intros.
+rewrite H1 in H0.
+apply (le_not_lt (S (m + m0)) m).
+apply H0.
+apply le_lt_n_Sm.
+apply le_plus_l.
+assert (forall (f : fol.Formula L) (s r m p : nat), m < s -> s + r <= p -> folProof.SysPrf L (Empty_set (fol.Formula L)) (fol.impH L (substituteFormula L (closeFrom s r f) m (fol.var L p)) (closeFrom s r (substituteFormula L f m (fol.var L p))))).
+clear H0 H H1 m T f n Hrecn.
+intros f s n.
+induction n as [| n Hrecn]; simpl in |- *; intros.
+apply (impRefl L).
+rewrite (subFormulaForall L).
+induction (eq_nat_dec (s + n) m).
+rewrite <- a in H.
+elim (le_not_lt s (s + n)).
+apply le_plus_l.
+auto.
+induction (In_dec eq_nat_dec (s + n) (freeVarTerm L (fol.var L p))).
+induction a as [H1| H1].
+rewrite <- plus_Snm_nSm in H0.
+simpl in H0.
+rewrite <- H1 in H0.
+elim (le_not_lt (S p) p).
+auto.
+apply lt_n_Sn.
+contradiction.
+apply (impI L).
+apply (forallI L).
+unfold not in |- *; intros.
+induction H1 as (x, H1); induction H1 as (H1, H2).
+induction H2 as [x H2| x H2]; [ induction H2 | induction H2 ].
+elim (In_list_remove2 _ _ _ _ _ H1).
+auto.
+apply impE with (substituteFormula L (closeFrom s n f) m (fol.var L p)).
+apply sysWeaken.
+apply Hrecn.
+auto.
+apply le_S_n.
+apply le_S.
+rewrite <- plus_Snm_nSm in H0.
+auto.
+eapply (forallSimp L).
+apply Axm; right; constructor.
+apply (impE L) with (substituteFormula L (closeFrom m n (subAllFormula f (fun x : nat => match le_lt_dec n x with | left _ => fol.var L x | right _ => fol.var L (m + x) end))) n (fol.var L (m + n))).
+apply sysWeaken.
+apply H2.
+apply lt_S_n.
+apply le_lt_n_Sm.
+auto.
+auto.
+apply (forallE L).
+apply (impE L) with (fol.forallH L n (closeFrom 0 n f)).
+apply sysExtend with (Empty_set (fol.Formula L)).
+unfold Included in |- *.
+intros.
+induction H3.
+apply (impI L).
+apply (forallI L).
+unfold not in |- *; intros.
+induction H3 as (x, H3); induction H3 as (H3, H4).
+induction H4 as [x H4| x H4]; [ induction H4 | induction H4 ].
+elim (In_list_remove2 _ _ _ _ _ H3).
+auto.
+apply Hrecn.
+apply H.
+apply le_S_n.
+apply le_S.
+auto.
+eapply (forallSimp L).
+apply Axm; right; constructor.
+apply Axm; right; constructor.
+Admitted.
+
+Lemma subAllCloseFrom1 : forall (n m : nat) (map : nat -> fol.Term L) (f : fol.Formula L) (T : fol.System L), (forall v : nat, v < n -> forall w : nat, In w (freeVarTerm L (map (m + v))) -> w < m) -> folProof.SysPrf L T (closeFrom m n f) -> folProof.SysPrf L T (subAllFormula f (fun x : nat => match le_lt_dec m x with | left _ => match le_lt_dec (m + n) x with | left _ => fol.var L x | right _ => map x end | right _ => fol.var L x end)).
+Proof.
+intro.
+induction n as [| n Hrecn]; simpl in |- *; intros.
+replace (subAllFormula f (fun x : nat => match le_lt_dec m x with | left _ => match le_lt_dec (m + 0) x with | left _ => fol.var L x | right _ => map x end | right _ => fol.var L x end)) with (subAllFormula f (fun x : nat => fol.var L x)).
+apply (impE L) with f.
+apply (iffE2 L).
+apply subAllFormulaId.
+apply H0.
+apply subAllFormula_ext.
+intros.
+rewrite <- plus_n_O.
+induction (le_lt_dec m m0).
+auto.
+auto.
+apply (impE L) with (substituteFormula L (subAllFormula f (fun x : nat => match le_lt_dec m x with | left _ => match le_lt_dec (m + n) x with | left _ => fol.var L x | right _ => map x end | right _ => fol.var L x end)) (m + n) (map (m + n))).
+replace (subAllFormula f (fun x : nat => match le_lt_dec m x with | left _ => match le_lt_dec (m + S n) x with | left _ => fol.var L x | right _ => map x end | right _ => fol.var L x end)) with (subAllFormula f (fun x : nat => substituteTerm L match le_lt_dec m x with | left _ => match le_lt_dec (m + n) x with | left _ => fol.var L x | right _ => map x end | right _ => fol.var L x end (m + n) (map (m + n)))).
+apply (iffE1 L).
+apply subSubAllFormula with (m := fun x : nat => match le_lt_dec m x with | left _ => match le_lt_dec (m + n) x with | left _ => fol.var L x | right _ => map x end | right _ => fol.var L x end).
+apply subAllFormula_ext.
+intros.
+induction (le_lt_dec m m0).
+rewrite <- plus_Snm_nSm.
+induction (le_lt_dec (S m + n) m0).
+simpl in a0.
+induction (le_lt_dec (m + n) m0).
+apply (subTermVar2 L).
+unfold not in |- *; intros.
+rewrite H2 in a0.
+apply (le_not_lt _ _ a0).
+apply lt_n_Sn.
+elim (le_not_lt (S (m + n)) (m + n)).
+eapply le_trans.
+apply a0.
+apply lt_le_weak.
+auto.
+apply lt_n_Sn.
+induction (le_lt_dec (m + n) m0).
+replace (m + n) with m0.
+apply (subTermVar1 L).
+simpl in b.
+induction (le_lt_or_eq _ _ a0).
+elim (lt_not_le _ _ H2).
+apply lt_n_Sm_le.
+auto.
+auto.
+apply (subTermNil L).
+unfold not in |- *; intros.
+assert (m + (m0 - m) = m0).
+apply le_plus_minus_r.
+auto.
+elim (lt_not_le (m + n) m).
+apply H with (m0 - m).
+apply plus_lt_reg_l with m.
+rewrite H3.
+rewrite <- plus_Snm_nSm.
+apply b.
+rewrite H3.
+apply H2.
+apply le_plus_l.
+apply (subTermVar2 L).
+unfold not in |- *; intros.
+rewrite <- H2 in b.
+elim (lt_not_le _ _ b).
+apply le_plus_l.
+apply (forallE L).
+apply (impE L) with (fol.forallH L (m + n) (closeFrom m n f)).
+apply sysExtend with (Empty_set (fol.Formula L)).
+unfold Included in |- *.
+intros.
+induction H1.
+apply (impI L).
+apply (forallI L).
+unfold not in |- *; intros.
+induction H1 as (x, H1); induction H1 as (H1, H2).
+induction H2 as [x H2| x H2]; [ induction H2 | induction H2 ].
+elim (In_list_remove2 _ _ _ _ _ H1).
+auto.
+apply Hrecn.
+intros.
+eapply H.
+apply lt_S.
+apply H1.
+auto.
+eapply (forallSimp L).
+apply Axm; right; constructor.
+Admitted.
+
+Lemma subAllCloseFrom : forall (n : nat) (m : nat -> fol.Term L) (f : fol.Formula L) (T : fol.System L), folProof.SysPrf L T (closeFrom 0 n f) -> folProof.SysPrf L T (subAllFormula f (fun x : nat => match le_lt_dec n x with | left _ => fol.var L x | right _ => m x end)).
+Proof.
+intros.
+assert (exists r : nat, (forall v : nat, v < n -> newVar (freeVarTerm L (m v)) <= r)).
+clear H T f.
+induction n as [| n Hrecn].
+exists 0.
+intros.
+elim (lt_n_O _ H).
+induction Hrecn as (x, H).
+exists (max (newVar (freeVarTerm L (m n))) x).
+intros.
+assert (v <= n).
+apply lt_n_Sm_le.
+auto.
+induction (le_lt_or_eq _ _ H1).
+apply le_trans with x.
+apply H; auto.
+apply le_max_r.
+rewrite H2.
+apply le_max_l.
+induction H0 as (x, H0).
+set (r := max (max n (newVar (freeVarFormula L f))) x) in *.
+set (f' := subAllFormula f (fun x : nat => match le_lt_dec n x with | left _ => fol.var L x | right _ => fol.var L (r + x) end)) in *.
+set (m' := fun x : nat => m (x - r)) in *.
+apply (impE L) with (subAllFormula f' (fun x : nat => match le_lt_dec r x with | left _ => match le_lt_dec (r + n) x with | left _ => fol.var L x | right _ => m' x end | right _ => fol.var L x end)).
+replace (subAllFormula f (fun x0 : nat => match le_lt_dec n x0 with | left _ => fol.var L x0 | right _ => m x0 end)) with (subAllFormula f (fun x : nat => subAllTerm match le_lt_dec n x with | left _ => fol.var L x | right _ => fol.var L (r + x) end (fun x0 : nat => match le_lt_dec r x0 with | left _ => match le_lt_dec (r + n) x0 with | left _ => fol.var L x0 | right _ => m' x0 end | right _ => fol.var L x0 end))).
+apply (iffE1 L).
+unfold f' in |- *.
+apply subAllSubAllFormula with (m1 := fun x0 : nat => match le_lt_dec n x0 with | left _ => fol.var L x0 | right _ => fol.var L (r + x0) end) (m2 := fun x0 : nat => match le_lt_dec r x0 with | left _ => match le_lt_dec (r + n) x0 with | left _ => fol.var L x0 | right _ => m' x0 end | right _ => fol.var L x0 end).
+unfold m' in |- *.
+apply subAllFormula_ext; intros.
+induction (le_lt_dec n m0).
+simpl in |- *.
+induction (le_lt_dec r m0).
+elim (le_not_lt _ _ a0).
+apply lt_le_trans with (newVar (freeVarFormula L f)).
+apply newVar2.
+auto.
+unfold r in |- *.
+eapply le_trans.
+apply le_max_r.
+apply le_max_l.
+auto.
+simpl in |- *.
+induction (le_lt_dec r (r + m0)).
+induction (le_lt_dec (r + n) (r + m0)).
+elim (lt_not_le _ _ b).
+eapply (fun p n m : nat => plus_le_reg_l n m p).
+apply a0.
+rewrite minus_plus.
+auto.
+elim (lt_not_le _ _ b0).
+apply le_plus_l.
+apply subAllCloseFrom1.
+intros.
+apply lt_le_trans with (newVar (freeVarTerm L (m v))).
+apply newVar2.
+unfold m' in H2.
+rewrite minus_plus in H2.
+auto.
+apply le_trans with x.
+apply H0.
+auto.
+unfold r in |- *.
+apply le_max_r.
+unfold f' in |- *.
+clear f'.
+apply liftCloseFrom.
+intros.
+apply lt_le_trans with (newVar (freeVarFormula L f)).
+apply newVar2.
+auto.
+unfold r in |- *.
+eapply le_trans.
+apply le_max_r.
+apply le_max_l.
+unfold r in |- *.
+eapply le_trans.
+apply le_max_l.
+apply le_max_l.
+Admitted.
+
+Lemma reduceSubAll : forall (T : fol.System L) (map : nat -> fol.Term L) (A B : fol.Formula L), (forall v : nat, ~ In_freeVarSys L v T) -> folProof.SysPrf L T (fol.iffH L A B) -> folProof.SysPrf L T (fol.iffH L (subAllFormula A map) (subAllFormula B map)).
+Proof.
+assert (forall (T : fol.System L) (map : nat -> fol.Term L) (A B : fol.Formula L), (forall v : nat, ~ In_freeVarSys L v T) -> folProof.SysPrf L T (fol.iffH L A B) -> folProof.SysPrf L T (fol.impH L (subAllFormula A map) (subAllFormula B map))).
+intros.
+replace (fol.impH L (subAllFormula A map) (subAllFormula B map)) with (subAllFormula (fol.impH L A B) map).
+set (n := newVar (freeVarFormula L (fol.impH L A B))) in *.
+replace (subAllFormula (fol.impH L A B) map) with (subAllFormula (fol.impH L A B) (fun x : nat => match le_lt_dec n x with | left _ => fol.var L x | right _ => map x end)).
+apply subAllCloseFrom.
+induction n as [| n Hrecn].
+simpl in |- *.
+apply (iffE1 L).
+auto.
+simpl in |- *.
+apply (forallI L).
+auto.
+auto.
+apply subAllFormula_ext.
+intros.
+induction (le_lt_dec n m).
+elim (le_not_lt _ _ a).
+unfold n in |- *.
+apply newVar2.
+auto.
+auto.
+reflexivity.
+intros.
+apply (iffI L).
+apply H; auto.
+apply H.
+auto.
+apply (iffSym L).
+Admitted.
+
+Lemma subToSubAll : forall (T : fol.System L) (A : fol.Formula L) (v : nat) (s : fol.Term L), folProof.SysPrf L T (fol.iffH L (substituteFormula L A v s) (subAllFormula A (fun x : nat => match eq_nat_dec v x with | left _ => s | right _ => fol.var L x end))).
+Proof.
+intros.
+apply (iffTrans L) with (substituteFormula L (subAllFormula A (fun x : nat => fol.var L x)) v s).
+apply sysExtend with (Empty_set (fol.Formula L)).
+intro.
+intros.
+induction H.
+apply (reduceSub L).
+unfold not in |- *; intros.
+induction H as (x, H); induction H as (H, H0).
+induction H0.
+apply (iffSym L).
+apply subAllFormulaId.
+eapply (iffTrans L).
+apply subSubAllFormula.
+replace (subAllFormula A (fun x : nat => match eq_nat_dec v x with | left _ => s | right _ => fol.var L x end)) with (subAllFormula A (fun n : nat => substituteTerm L ((fun x : nat => fol.var L x) n) v s)).
+apply (iffRefl L).
+apply subAllFormula_ext.
+intros.
+simpl in |- *.
+Admitted.
+
+Lemma subAllSubFormula : forall (T : fol.System L) (A : fol.Formula L) (v : nat) (s : fol.Term L) (map : nat -> fol.Term L), folProof.SysPrf L T (fol.iffH L (subAllFormula (substituteFormula L A v s) map) (subAllFormula A (fun x : nat => match eq_nat_dec v x with | left _ => subAllTerm s map | right _ => map x end))).
+Proof.
+intros.
+apply (sysExtend L) with (Empty_set (fol.Formula L)).
+intro.
+intros.
+induction H.
+eapply (iffTrans L).
+apply reduceSubAll.
+unfold not in |- *; intros.
+induction H as (x, H); induction H as (H, H0).
+induction H0.
+apply subToSubAll.
+eapply (iffTrans L).
+apply subAllSubAllFormula.
+replace (subAllFormula A (fun x : nat => match eq_nat_dec v x with | left _ => subAllTerm s map | right _ => map x end)) with (subAllFormula A (fun n : nat => subAllTerm ((fun x : nat => match eq_nat_dec v x with | left _ => s | right _ => fol.var L x end) n) map)).
+apply (iffRefl L).
+apply subAllFormula_ext.
+intros.
+induction (eq_nat_dec v m).
+auto.
+auto.

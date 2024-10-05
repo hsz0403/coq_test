@@ -1,0 +1,49 @@
+Require Import Sets.
+Inductive Un : Set := void : Un.
+Inductive F : Set :=.
+Definition Vide : Ens := sup F (fun f : F => match f return Ens with end).
+Definition Paire : forall E E' : Ens, Ens.
+intros.
+apply (sup bool).
+simple induction 1.
+exact E.
+exact E'.
+Defined.
+Hint Resolve Paire_sound_right Paire_sound_left: zfc.
+Hint Resolve IN_Paire_left IN_Paire_right Vide_est_vide: zfc.
+Definition Sing (E : Ens) := Paire E E.
+Hint Resolve IN_Sing IN_Sing_EQ: zfc.
+Hint Resolve Sing_sound: zfc.
+Hint Resolve EQ_Sing_EQ: zfc.
+Inductive sig (A : Type) (P : A -> Prop) : Type := exist : forall x : A, P x -> sig A P.
+Definition Comp : Ens -> (Ens -> Prop) -> Ens.
+simple induction 1; intros A f fr P.
+apply (sup (sig A (fun x => P (f x)))).
+simple induction 1; intros x p; exact (f x).
+Defined.
+Definition pi1 : Ens -> Type.
+simple induction 1.
+intros A f r.
+exact A.
+Defined.
+Definition pi2 : forall E : Ens, pi1 E -> Ens.
+simple induction E.
+intros A f r.
+exact f.
+Defined.
+Definition Union : forall E : Ens, Ens.
+simple induction 1; intros A f r.
+apply (sup (depprod A (fun x : A => pi1 (f x)))).
+simple induction 1; intros a b.
+exact (pi2 (f a) b).
+Defined.
+Definition Inter (E : Ens) : Ens := match E with | sup A f => sup _ (fun c : depprod _ (fun a : A => depprod _ (fun b : pi1 (f a) => forall x : A, IN (pi2 (f a) b) (f x))) => match c with | dep_i a (dep_i b p) => pi2 (f a) b end) end.
+Definition Inter' (E : Ens) : Ens := Comp (Union E) (fun e : Ens => forall a : Ens, IN a E -> IN e a).
+Definition Power (E : Ens) : Ens := match E with | sup A f => sup _ (fun P : A -> Prop => sup _ (fun c : depprod A (fun a : A => P a) => match c with | dep_i a p => f a end)) end.
+
+Theorem IN_P_Comp : forall (E A : Ens) (P : Ens -> Prop), (forall w1 w2 : Ens, P w1 -> EQ w1 w2 -> P w2) -> IN A E -> P A -> IN A (Comp E P).
+simple induction E; simpl in |- *; intros B f HR A P H i; elim i; simpl in |- *; intros.
+cut (P (f x)).
+intros Pf.
+exists (exist B (fun x : B => P (f x)) x Pf); simpl in |- *; auto with zfc.
+apply H with A; auto with zfc.

@@ -1,0 +1,24 @@
+Require Import Coq.Logic.Classical_Prop.
+Require Import Coq.Classes.RelationClasses.
+Require Import Coq.Relations.Relation_Definitions.
+Require Import Logic.lib.Ensembles_ext.
+Require Import Logic.GeneralLogic.Base.
+Require Import Logic.GeneralLogic.KripkeModel.
+Require Import Logic.MinimumLogic.Syntax.
+Require Logic.MinimumLogic.Semantics.Kripke.
+Require Logic.MinimumLogic.Semantics.Trivial.
+Local Open Scope logic_base.
+Local Open Scope syntax.
+Local Open Scope kripke_model.
+Import KripkeModelFamilyNotation.
+Import KripkeModelNotation_Intuitionistic.
+Section SemanticEquiv.
+Context {L: Language} {minL: MinimumLanguage L} {MD: Model} {SM: Semantics L MD}.
+End SemanticEquiv.
+
+Lemma eqR_KripkeIntuitionistic: @Kripke.KripkeIntuitionisticSemantics L MD (unit_kMD _) tt eq SM.
+Proof.
+constructor.
+intros; hnf; intros.
+hnf in H; subst.
+auto.

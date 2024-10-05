@@ -1,0 +1,343 @@
+Set Implicit Arguments.
+Require Import RelationClasses Morphisms List Lia Init.Nat Setoid.
+From Undecidability.HOU Require Import calculus.calculus second_order.diophantine_equations systemunification nth_order_unification.
+Import ListNotations.
+Set Default Proof Using "Type".
+Definition ag : Const := {| const_type := option (option False); ctype := fun o => match o with | None => alpha → alpha → alpha | Some None => alpha | Some (Some f) => match f with end end; |}.
+Notation g := (@const ag None).
+Notation a := (@const ag (Some None)).
+Hint Resolve typing_a typing_g : core.
+Section Linearization.
+Implicit Types (S: list (exp ag)).
+Definition lin S t := AppL (map (app g) S) t.
+Hint Rewrite lin_nil lin_cons lin_app : simplify.
+Hint Rewrite lin_ren lin_subst : asimpl.
+End Linearization.
+Hint Rewrite lin_ren lin_subst : asimpl.
+Hint Rewrite lin_nil lin_cons lin_app : simplify.
+Section Encoding.
+Notation Succ := (g a).
+Definition enc n s := lin (repeat a n) s.
+Definition encodes s n := forall t delta, (ren delta s) t ≡ enc n t.
+Arguments enc : simpl never.
+Section enc_equations.
+Hint Rewrite enc_zero : simplify.
+Hint Rewrite enc_succ : simplify.
+Hint Rewrite enc_succ_out : simplify.
+Hint Rewrite enc_app : simplify.
+End enc_equations.
+Hint Rewrite enc_app enc_succ_out enc_succ enc_zero : simplify.
+Hint Rewrite enc_ren enc_subst : asimpl.
+Hint Resolve enc_normal : core.
+Global Instance enc_equiv: Proper (Logic.eq ++> equiv step ++> equiv step) enc.
+Proof.
+intros ?? -> ??; unfold enc, lin; now intros ->.
+End Encoding.
+Hint Resolve enc_normal : core.
+Hint Rewrite enc_zero enc_succ enc_app enc_succ_out: simplify.
+Hint Rewrite enc_ren enc_subst: asimpl.
+Arguments enc : simpl never.
+Notation Succ := (g a).
+Section Variables.
+Definition F (x: nat): nat := (I__S (inl x)).
+Definition G (x y z: nat): nat := I__S (inr (I__P (x, I__P (y, z)))).
+Definition Fs E := map F (Vars__de E).
+Definition Gs (E: list deq) := flat_map (fun e => match e with | (x *ₑ y =ₑ z) => [G x y z] | _ => nil end) E.
+End Variables.
+Arguments F : simpl never.
+Arguments G : simpl never.
+Arguments Fs : simpl never.
+Arguments Gs : simpl never.
+Hint Resolve F_not_in_G G_not_in_F : core.
+Section Equations.
+Implicit Types (x y z: nat).
+Definition Cons s t := g s t.
+Notation "s ::: t" := (Cons s t) (at level 62).
+Definition Nil := a.
+Definition Pair s t := g s t.
+Notation "⟨ s , t ⟩" := (Pair s t) (at level 60).
+Definition varEQ x: eq ag := (lambda lambda var (2 + F x) (Succ (var 1)), lambda lambda Succ (var (2 + F x) (var 1))).
+Definition constEQ x: eq ag := (lambda lambda (var (2 + F x)) (var 0), lambda lambda enc 1 (var 0)).
+Definition addEQ x y z: eq ag := (lambda lambda var (2 + F x) (var (2 + F y) (var 1)), lambda lambda var (2 + F z) (var 1)).
+Definition mulEQ x y z : eq ag := (lambda lambda var (2 + G x y z) (⟨var (2 + F z) (var 1), var (2 + F x) (var 0)⟩ ::: Nil) (var 1) (var 0) , lambda lambda ⟨var 1, var 0⟩ ::: var (2 + G x y z) Nil (var (2 + F y) (var 1)) (Succ (var 0))).
+Definition eqs (e: deq) : eqs ag := match e with | x =ₑ 1 => [varEQ x; constEQ x] | x +ₑ y =ₑ z => [varEQ x; varEQ y; varEQ z; addEQ x y z] | x *ₑ y =ₑ z => [varEQ x; varEQ y; varEQ z; mulEQ x y z] end.
+Notation Eqs E := (flat_map eqs E).
+End Equations.
+Notation Eqs E := (flat_map eqs E).
+Notation "s ::: t" := (Cons s t) (at level 62).
+Notation "⟨ s , t ⟩" := (Pair s t) (at level 60).
+Section Typing.
+Variable (E: list deq).
+Definition Gamma__deq := tab (fun x => if partition_F_G x then (alpha → alpha) else (alpha → alpha → alpha → alpha)) (S (Sum (Fs E) + Sum (Gs E))).
+Arguments Gamma__deq: simpl never.
+Hint Resolve typing_G typing_F : core.
+Ltac autotype := repeat match goal with | [|- _ ⊢(2) var (?n + ?x) : _] => eapply ordertyping_preservation_under_renaming with (delta := add n) (s := var x) | [|- _ ⊢(2) var (G _ _ _) : _ ]=> eapply typing_G | [|- _ ⊢(2) var (F _) : _ ]=> eapply typing_F | [|- _ ⊢(2) var ?n : _] => now (econstructor; cbn; eauto) | [|- _ ⊢(2) const _ : _] => eauto | [|- _ ⊢(2) enc _ _ : _] => eapply enc_typing | [|- _ ⊢(2) _ : _] => econstructor | [|- _ ⊫ add _ : _] => now intros ?? | [H: ?e ∈ E |- _ ∈ Vars__de E] => eapply Vars__de_in; [eapply H|cbn;intuition] end.
+End Typing.
+Program Instance H10_to_SOU (E: list deq): ordsysuni ag 2 := { Gamma₀' := Gamma__deq E; E₀' := Eqs E; L₀' := repeat (alpha → alpha → alpha) (length (Eqs E)); H₀' := _; }.
+Next Obligation.
+eapply ordertyping_combine; eapply repeated_ordertyping; unfold left_side, right_side; simplify; eauto 1.
+all: intros ? ?; mapinj; eapply in_flat_map in H1 as []; intuition.
+all: eapply typing_equations; eauto.
+
+Lemma dec_enc: forall s, normal s -> { n | s a ≡ enc n a } + ({ n | s a ≡ enc n a } -> False).
+Proof.
+intros s N.
+specialize (@red_fun_rho _ (@step ag) (@par ag) rho) as f.
+do 4 mp f; try typeclasses eauto; eauto.
+assert (s a ▷ rho (s a)).
+-
+eapply id in f as g.
+destruct g as [H1 H2].
+split; [eauto|].
+destruct s; cbn.
++
+eapply normal_app_intro; eauto.
++
+eapply normal_app_intro; eauto.
++
+eapply normal_subst.
+1 - 2: intros []; cbn; eauto.
+enough (rho s = s) as -> by eauto using normal_lam_elim.
+eapply red_fun_fp; eauto using normal_lam_elim.
++
+eapply head_atom in N as isA; [|eauto].
+assert (rho s1 = s1) as -> by (eapply red_fun_fp; eauto using normal_app_l, normal_app_r).
+assert (rho s2 = s2) as -> by (eapply red_fun_fp; eauto using normal_app_l, normal_app_r).
+destruct s1; cbn in isA; intuition.
+-
+destruct (dec_enc_eq (rho (s a))) as [[n H1]|H1].
++
+left.
+exists n.
+rewrite H1 in H.
+eapply equiv_join.
+rewrite H.
+all: eauto.
++
+right.
+intros [n H2].
+eapply H1.
+exists n.
+eapply equiv_unique_normal_forms; eauto.
+2: eapply H.
+rewrite <-H2.
+symmetry.
+eapply equiv_join.
+rewrite H.
+Admitted.
+
+Lemma normal_forms_encodes s: normal s -> lambda lambda (ren (add 2) s) (enc 1 (var 1)) ≡ lambda lambda Succ ((ren (add 2) s) (var 1)) -> exists n, encodes s n.
+Proof.
+remember (add 2) as delta.
+cbn; intros H EQ % equiv_lam_elim % equiv_lam_elim; destruct s; cbn in EQ.
+-
+Injection EQ; Discriminate.
+-
+Injection EQ; Discriminate.
+-
+eapply equiv_reduce in EQ.
+2, 3: dostep; asimpl; reflexivity.
+eapply normal_lam_elim in H.
+enough (exists n : nat, forall t delta, t .: delta >> var • s ≡ enc n t) as [n H'] by (exists n; intros t delta'; asimpl; rewrite stepBeta; asimpl; eauto).
+induction s as [[] | | |]; unfold funcomp in EQ; cbn in EQ.
++
+now (exists 0).
++
+Discriminate.
++
+Discriminate.
++
+Discriminate.
++
+eapply head_atom in H as H'; cbn; intuition.
+eapply equiv_app_elim in EQ as [EQ1 EQ2]; cbn; intuition.
+2: eapply atom_head_lifting; eauto; intros []; cbn; intuition.
+enough (s1 = g a).
+*
+subst.
+cbn in EQ2.
+eapply IHs2 in EQ2.
+2: eauto using normal_app_r.
+destruct EQ2.
+subst.
+exists (S x).
+intros t delta; cbn; simplify; now rewrite H0.
+*
+destruct s1 as [[] | | | t1 t2]; simplify in EQ1; cbn in *.
+1 - 4: try Injection EQ1; Discriminate.
+assert (isAtom (head (g a (var 1) .: delta >> var • t1))) by (eapply atom_head_lifting; eauto; intros []; cbn; intuition).
+Injection EQ1.
+assert (isAtom (head t2)).
+{
+eapply head_atom.
+eauto using normal_app_r, normal_app_l.
+intros ?; destruct t2; cbn in H2; intuition; Discriminate.
+}
+assert (isAtom (head (g a (var 1) .: delta >> var • t2))) by (eapply atom_head_lifting; eauto; intros []; cbn; intuition).
+destruct t1; cbn in *; try Discriminate.
+destruct f; cbn in *; Discriminate.
+destruct t2; cbn in *; try Discriminate.
+destruct f; cbn in *; Discriminate.
+Injection H1; subst.
+Injection H2; subst.
+reflexivity.
+-
+eapply normal_ren with (delta0 := delta) in H.
+eapply head_atom in H; eauto.
+cbn in EQ.
+Injection EQ.
+Injection H0.
+unshelve eapply ren_equiv_proper in H2; [exact (pred >> pred)|exact (pred >> pred)|eauto..]; asimpl in H2.
+unshelve eapply ren_equiv_proper in H3; [exact (pred >> pred)|exact (pred >> pred)|eauto..]; asimpl in H3.
+exists 1.
+intros t delta'; simplify.
+subst delta.
+asimpl in H3.
+asimpl in H2.
+Admitted.
+
+Lemma encodes_characeristic s n: encodes s n -> lambda lambda (ren (add 2) s) (enc 1 (var 0)) ≡ lambda lambda g a ((ren (add 2) s) (enc 0 (var 0))).
+Proof.
+Admitted.
+
+Lemma disjoint_F_G x m n p: F x <> G m n p.
+Proof.
+intros H.
+unfold F, G in H; eapply injective_I__S in H.
+Admitted.
+
+Lemma F_injective x y: F x = F y -> x = y.
+Proof.
+intros H; unfold F in H; eapply injective_I__S in H.
+Admitted.
+
+Lemma G_injective a b c x y z: G a b c = G x y z -> a = x /\ b = y /\ c = z.
+Proof.
+intros H; unfold G in H; eapply injective_I__S in H.
+injection H as H.
+apply injective_I__P in H; injection H as ? H.
+apply injective_I__P in H; injection H as ? H.
+Admitted.
+
+Lemma partition_F_G: forall h, { x | F x = h } + { '(x, y, z) | G x y z = h } .
+Proof.
+intros h.
+unfold F, G.
+destruct (R__S h) eqn: H1.
++
+left.
+exists n.
+rewrite <-H1.
+now rewrite I__S_R__S.
++
+right.
+destruct (R__P n) as [a n'] eqn: H2.
+destruct (R__P n') as [b c] eqn: H3.
+exists (a, b, c).
+apply (f_equal I__S) in H1.
+apply (f_equal I__P) in H2.
+apply (f_equal I__P) in H3.
+rewrite ?I__P_R__P, ?I__S_R__S in *.
+Admitted.
+
+Lemma Fs_in x E: x ∈ Vars__de E -> F x ∈ Fs E.
+Proof.
+intros; eapply in_map_iff.
+Admitted.
+
+Lemma Gs_in x y z E: (x *ₑ y =ₑ z) ∈ E -> G x y z ∈ Gs E.
+Proof.
+intros; eapply in_flat_map.
+exists (x *ₑ y =ₑ z).
+Admitted.
+
+Lemma in_Fs y E: y ∈ Fs E -> exists x, F x = y /\ x ∈ Vars__de E.
+Proof.
+Admitted.
+
+Lemma F_not_in_G x E: ~ F x ∈ Gs E.
+Proof.
+intros (a & b & c & []) % in_Gs.
+Admitted.
+
+Lemma G_not_in_F x y z E: ~ G x y z ∈ Fs E.
+Proof.
+intros (a & []) % in_Fs.
+Admitted.
+
+Lemma in_Equations q E: q ∈ Eqs E <-> (exists e, e ∈ E /\ q ∈ eqs e).
+Proof.
+Admitted.
+
+Lemma Gamma__deq_nth_F h: h ∈ Fs E -> nth Gamma__deq h = Some (alpha → alpha).
+Proof.
+intros H.
+unfold Gamma__deq.
+rewrite tab_nth.
+destruct (partition_F_G) as [[x ?]|[[[x y] z] ? ]]; subst; intuition.
+eapply G_not_in_F in H as [].
+eapply Sum_in in H.
+Admitted.
+
+Lemma Gamma__deq_nth_G h: h ∈ Gs E -> nth Gamma__deq h = Some (alpha → alpha → alpha → alpha).
+Proof.
+intros H.
+unfold Gamma__deq.
+rewrite tab_nth.
+destruct (partition_F_G) as [[x ?]|[[[x y] z] ? ]]; subst; intuition.
+eapply F_not_in_G in H as [].
+eapply Sum_in in H.
+Admitted.
+
+Lemma nth_Gamma__deq_F x A: nth Gamma__deq (F x) = Some A -> A = alpha → alpha.
+Proof.
+intros H.
+eapply nth_error_Some_lt in H as H'.
+unfold Gamma__deq in *.
+rewrite tab_nth in H; simplify in *; eauto.
+destruct partition_F_G as [[]| [[[]] ?]].
+congruence.
+Admitted.
+
+Lemma nth_Gamma__deq_G x y z A: nth Gamma__deq (G x y z) = Some A -> A = alpha → alpha → alpha → alpha.
+Proof.
+intros H.
+eapply nth_error_Some_lt in H as H'.
+unfold Gamma__deq in *; simplify in *.
+rewrite tab_nth in H; simplify in *; eauto.
+destruct partition_F_G as [[]| [[[]] ?]].
+exfalso; eapply disjoint_F_G; eauto.
+Admitted.
+
+Lemma Gamma__deq_content A : A ∈ Gamma__deq -> A = alpha → alpha \/ A = alpha → alpha → alpha → alpha.
+Proof.
+intros H; unfold Gamma__deq in *.
+remember (S (Sum _ + Sum _)) as n.
+clear Heqn.
+induction n; cbn in *; intuition.
+eapply in_app_iff in H; cbn in *; intuition.
+Admitted.
+
+Lemma ord_Gamma__deq: ord' Gamma__deq <= 2.
+Proof.
+unfold Gamma__deq; remember (S (Sum _ + Sum _)) as n.
+clear Heqn.
+induction n; cbn; simplify; cbn; eauto.
+rewrite IHn; simplify.
+destruct (partition_F_G).
+Admitted.
+
+Lemma typing_F x: x ∈ Vars__de E -> Gamma__deq ⊢(2) @var ag (F x) : alpha → alpha.
+Proof.
+intros H.
+econstructor.
+cbn; eauto.
+Admitted.
+
+Lemma in_Gs y E: y ∈ Gs E -> exists a b c, G a b c = y /\ (a *ₑ b =ₑ c) ∈ E.
+Proof.
+intros H; unfold Gs in *; eapply in_flat_map in H.
+destruct H as [[]]; cbn in *; intuition.
+subst.
+exists x; exists y0; exists z.
+intuition.

@@ -1,0 +1,227 @@
+Require Import Reals mathcomp.ssreflect.ssreflect.
+Require Import Psatz.
+Require Import Rcomplements Rbar Hierarchy.
+Require Import Derive RInt Continuity Lim_seq ElemFct RInt_analysis.
+Ltac pos_rat := repeat ( apply Rdiv_lt_0_compat || apply Rplus_lt_0_compat || apply Rmult_lt_0_compat) ; try by apply Rlt_0_1.
+Definition fab (a b x : R) : R := (a + b * ln x) / x.
+Definition f (x : R) : R := fab 2 2 x.
+Fixpoint u (n : nat) : R := match n with | O => 2 | S n => 2/3 * u n + 1/3 * (INR n) + 1 end.
+Definition v (n : nat) : R := u n - INR n.
+Definition Su (n : nat) : R := sum_f_R0 u n.
+Definition Tu (n : nat) : R := Su n / (INR n) ^ 2.
+
+Lemma sign_0_lt : forall x, 0 < x <-> 0 < sign x.
+Proof.
+intros x.
+unfold sign.
+Admitted.
+
+Lemma Dfab (a b : R) : forall x, 0 < x -> is_derive (fab a b) x (((b - a) - b * ln x) / x ^ 2).
+Proof.
+move => x Hx.
+evar_last.
+apply is_derive_div.
+apply @is_derive_plus.
+apply is_derive_const.
+apply is_derive_scal.
+now apply is_derive_Reals, derivable_pt_lim_ln.
+apply is_derive_id.
+by apply Rgt_not_eq.
+rewrite /Rdiv /plus /zero /one /=.
+field.
+Admitted.
+
+Lemma Val_a_b (a b : R) : fab a b 1 = 2 -> Derive (fab a b) 1 = 0 -> a = 2 /\ b = 2.
+Proof.
+move => Hf Hdf.
+rewrite /fab in Hf.
+rewrite ln_1 in Hf.
+rewrite Rdiv_1 in Hf.
+rewrite Rmult_0_r in Hf.
+rewrite Rplus_0_r in Hf.
+rewrite Hf in Hdf |- * => {a Hf}.
+split.
+reflexivity.
+replace (Derive (fab 2 b) 1) with (((b - 2) - b * ln 1) / 1 ^ 2) in Hdf.
+rewrite ln_1 /= in Hdf.
+field_simplify in Hdf.
+rewrite !Rdiv_1 in Hdf.
+by apply Rminus_diag_uniq.
+apply sym_eq, is_derive_unique.
+apply Dfab.
+Admitted.
+
+Lemma Signe_df : forall x, 0 < x -> sign (Derive f x) = sign (- ln x).
+Proof.
+move => x Hx.
+rewrite (is_derive_unique f x _ (Dfab 2 2 x Hx)).
+replace ((2 - 2 - 2 * ln x) / x ^ 2) with (2 / x ^ 2 * (- ln x)) by (field ; now apply Rgt_not_eq).
+rewrite sign_mult sign_eq_1.
+apply Rmult_1_l.
+apply Rdiv_lt_0_compat.
+apply Rlt_0_2.
+apply pow2_gt_0.
+Admitted.
+
+Lemma filterlim_f_0 : filterlim f (at_right 0) (Rbar_locally m_infty).
+Proof.
+unfold f, fab.
+eapply (filterlim_comp_2 _ _ Rmult).
+eapply filterlim_comp_2.
+apply filterlim_const.
+eapply filterlim_comp_2.
+apply filterlim_const.
+by apply is_lim_ln_0.
+apply (filterlim_Rbar_mult 2 m_infty m_infty).
+unfold is_Rbar_mult, Rbar_mult'.
+case: Rle_dec (Rlt_le _ _ Rlt_0_2) => // H _ ; case: Rle_lt_or_eq_dec (Rlt_not_eq _ _ Rlt_0_2) => //.
+apply (filterlim_Rbar_plus 2 _ m_infty).
+by [].
+by apply filterlim_Rinv_0_right.
+Admitted.
+
+Lemma Lim_f_p_infty : is_lim f p_infty 0.
+Proof.
+apply is_lim_ext_loc with (fun x => 2 / x + 2 * (ln x / x)).
+exists 0.
+move => y Hy.
+rewrite /f /fab.
+field.
+by apply Rgt_not_eq.
+eapply is_lim_plus.
+apply is_lim_scal_l.
+apply is_lim_inv.
+by apply is_lim_id.
+by [].
+apply is_lim_scal_l.
+by apply is_lim_div_ln_p.
+Admitted.
+
+Lemma Variation_1 : forall x y, 0 < x -> x < y -> y < 1 -> f x < f y.
+Proof.
+apply (incr_function _ 0 1 (fun x => (2 - 2 - 2 * ln x) / x ^ 2)).
+move => x H0x Hx1.
+by apply (Dfab 2 2 x).
+move => x H0x Hx1.
+apply sign_0_lt.
+rewrite -(is_derive_unique _ _ _ (Dfab 2 2 x H0x)).
+rewrite Signe_df.
+apply -> sign_0_lt.
+apply Ropp_lt_cancel ; rewrite Ropp_0 Ropp_involutive.
+rewrite -ln_1.
+by apply ln_increasing.
+Admitted.
+
+Lemma Variation_2 : forall x y, 1 < x -> x < y -> f x > f y.
+Proof.
+move => x y H1x Hxy.
+apply Ropp_lt_cancel.
+apply (incr_function (fun x => - f x) 1 p_infty (fun z => - ((2 - 2 - 2 * ln z) / z ^ 2))).
+move => z H1z _.
+apply: is_derive_opp.
+apply (Dfab 2 2 z).
+by apply Rlt_trans with (1 := Rlt_0_1).
+move => z H1z _.
+apply Ropp_lt_cancel ; rewrite Ropp_0 Ropp_involutive.
+apply sign_lt_0.
+rewrite -(is_derive_unique _ _ _ (Dfab 2 2 z (Rlt_trans _ _ _ Rlt_0_1 H1z))).
+rewrite Signe_df.
+apply -> sign_lt_0.
+apply Ropp_lt_cancel ; rewrite Ropp_0 Ropp_involutive.
+rewrite -ln_1.
+apply ln_increasing.
+by apply Rlt_0_1.
+by apply H1z.
+by apply Rlt_trans with (1 := Rlt_0_1).
+by [].
+by [].
+Admitted.
+
+Lemma f_eq_1_0_1 : exists x, 0 < x <= 1 /\ f x = 1.
+Proof.
+case: (IVT_Rbar_incr (fun x => f (Rabs x)) 0 1 m_infty 2 1).
+eapply filterlim_comp.
+apply filterlim_Rabs_0.
+by apply filterlim_f_0.
+apply is_lim_comp with 1.
+replace 2 with (f 1).
+apply is_lim_continuity.
+apply derivable_continuous_pt.
+exists (((2 - 2) - 2 * ln 1) / 1 ^ 2) ; apply is_derive_Reals, Dfab.
+by apply Rlt_0_1.
+rewrite /f /fab ln_1 /= ; field.
+rewrite -{2}(Rabs_pos_eq 1).
+apply (is_lim_continuity Rabs 1).
+by apply continuity_pt_filterlim, continuous_Rabs.
+by apply Rle_0_1.
+exists (mkposreal _ Rlt_0_1) => /= x H0x Hx.
+rewrite /ball /= /AbsRing_ball /= in H0x.
+apply Rabs_lt_between' in H0x.
+rewrite Rminus_eq_0 in H0x.
+contradict Hx.
+rewrite -(Rabs_pos_eq x).
+by apply Rbar_finite_eq.
+by apply Rlt_le, H0x.
+move => x H0x Hx1.
+apply (continuity_pt_comp Rabs).
+by apply continuity_pt_filterlim, continuous_Rabs.
+rewrite Rabs_pos_eq.
+apply derivable_continuous_pt.
+exists (((2 - 2) - 2 * ln x) / x ^ 2) ; apply is_derive_Reals, Dfab.
+by [].
+by apply Rlt_le.
+by apply Rlt_0_1.
+split => //.
+apply Rminus_lt_0 ; ring_simplify ; by apply Rlt_0_1.
+move => x [H0x [Hx1 Hfx]].
+rewrite Rabs_pos_eq in Hfx.
+exists x ; repeat split.
+by apply H0x.
+by apply Rlt_le.
+by apply Hfx.
+Admitted.
+
+Lemma f_eq_1_1_p_infty : exists x, 1 <= x /\ f x = 1.
+Proof.
+case: (IVT_Rbar_incr (fun x => - f x) 1 p_infty (-2) 0 (-1)).
+replace (-2) with (-f 1).
+apply (is_lim_continuity (fun x => - f x)).
+apply continuity_pt_opp.
+apply derivable_continuous_pt.
+exists (((2 - 2) - 2 * ln 1) / 1 ^ 2) ; apply is_derive_Reals, Dfab.
+by apply Rlt_0_1.
+rewrite /f /fab ln_1 /= ; field.
+evar_last.
+apply is_lim_opp.
+by apply Lim_f_p_infty.
+simpl ; by rewrite Ropp_0.
+move => x H0x Hx1.
+apply continuity_pt_opp.
+apply derivable_continuous_pt.
+exists (((2 - 2) - 2 * ln x) / x ^ 2) ; apply is_derive_Reals, Dfab.
+by apply Rlt_trans with (1 := Rlt_0_1).
+by [].
+split ; apply Rminus_lt_0 ; ring_simplify ; by apply Rlt_0_1.
+move => x [H0x [Hx1 Hfx]].
+exists x ; split.
+by apply Rlt_le.
+Admitted.
+
+Lemma If : forall x, 0 < x -> is_derive (fun y : R => 2 * ln y + (ln y) ^ 2) x (f x).
+Proof.
+move => y Hy.
+evar_last.
+apply @is_derive_plus.
+apply is_derive_Reals.
+apply derivable_pt_lim_scal.
+by apply derivable_pt_lim_ln.
+apply is_derive_pow.
+by apply is_derive_Reals, derivable_pt_lim_ln.
+rewrite /f /fab /plus /= ; field.
+Admitted.
+
+Lemma sign_lt_0 : forall x, x < 0 <-> sign x < 0.
+Proof.
+intros x.
+unfold sign.
+destruct total_order_T as [[H|H]|H] ; lra.

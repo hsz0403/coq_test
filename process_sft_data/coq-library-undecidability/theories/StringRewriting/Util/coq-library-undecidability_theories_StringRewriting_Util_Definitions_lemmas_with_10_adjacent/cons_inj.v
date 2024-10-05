@@ -1,0 +1,185 @@
+Require Import Undecidability.StringRewriting.SR.
+Require Import Undecidability.Shared.ListAutomation.
+Require Import Setoid Morphisms Lia.
+Import ListAutomationNotations.
+Local Set Implicit Arguments.
+Local Unset Strict Implicit.
+Import RuleNotation.
+Local Definition symbol := nat.
+Local Definition string := (string nat).
+Local Definition card : Type := (string * string).
+Local Definition stack := list card.
+Local Definition SRS := SRS nat.
+Implicit Types a b : symbol.
+Implicit Types x y z : string.
+Implicit Types d e : card.
+Implicit Types A R P : stack.
+Coercion sing (n : nat) := [n].
+Scheme rewt_ind' := Induction for rewt Sort Prop.
+Instance PreOrder_rewt R : PreOrder (rewt R).
+Proof.
+split.
+-
+econstructor.
+-
+hnf.
+intros.
+induction H; eauto using rewR, rewS.
+Instance Proper_rewt R : Proper (rewt R ==> rewt R ==> rewt R) (@app symbol).
+Proof.
+hnf.
+intros.
+hnf.
+intros.
+induction H.
+-
+now eapply rewt_app_L.
+-
+inv H.
+transitivity (x1 ++ u ++ (y1 ++ x0)).
+now simpl_list.
+econstructor.
+econstructor.
+eassumption.
+rewrite <- IHrewt.
+now simpl_list.
+Fixpoint sigma (a : symbol) A := match A with nil => [a] | x/y :: A => x ++ (sigma a A) ++ y end.
+Fixpoint sym (R : list card) := match R with [] => [] | x / y :: R => x ++ y ++ sym R end.
+Hint Resolve sym_word_l sym_word_R : core.
+Fixpoint fresh (l : list nat) := match l with | [] => 0 | x :: l => S x + fresh l end.
+
+Lemma list_prefix_inv'' X (a : X) x u y v : ~ a el u -> ~ a el v -> x ++ a :: y = u ++ a :: v -> x = u /\ y = v.
+Proof.
+induction x in u, v |- *; intros Hu Hv H; cbn in *.
+-
+destruct u.
+split.
+reflexivity.
+now inversion H.
+inversion H; subst.
+cbn in Hu.
+tauto.
+-
+destruct u.
++
+inversion H; subst.
+destruct Hv.
+eauto.
++
+inversion H; subst.
+Admitted.
+
+Lemma list_prefix_inv' X (a a' : X) x u y v : ~ In a' x -> ~ In a u -> x ++ a :: y = u ++ a' :: v -> a = a' /\ x = u /\ y = v.
+Proof.
+intro.
+revert u.
+induction x; intros; destruct u; inversion H1; subst; try now firstorder.
+eapply IHx in H4; try now firstorder.
+Admitted.
+
+Lemma list_prefix_inv X (a : X) x u y v : ~ a el x -> ~ a el u -> x ++ a :: y = u ++ a :: v -> x = u /\ y = v.
+Proof.
+intro.
+revert u.
+induction x; intros; destruct u; inv H1; try now firstorder.
+eapply IHx in H4; try now firstorder.
+Admitted.
+
+Lemma split_inv X (u z x y : list X) (s : X) : u ++ z = x ++ s :: y -> ~ s el u -> exists x' : list X, x = u ++ x'.
+Proof.
+revert u.
+induction x; cbn; intros.
+-
+destruct u.
+cbn.
+eauto.
+inv H.
+firstorder.
+-
+destruct u.
+cbn.
+eauto.
+inv H.
+edestruct IHx.
+cbn.
+rewrite H3.
+reflexivity.
+firstorder.
+subst.
+cbn.
+Admitted.
+
+Lemma in_split X (a : X) (x : list X) : a el x -> exists y z, x = y ++ [a] ++ z.
+Proof.
+induction x; cbn; intros.
+-
+firstorder.
+-
+destruct H as [-> | ].
++
+now exists [], x.
++
+destruct (IHx H) as (y & z & ->).
+Admitted.
+
+Lemma rewt_induct : forall (R : SRS) z (P : string -> Prop), (P z) -> (forall x y : string, rew R x y -> rewt R y z -> P y -> P x) -> forall s, rewt R s z -> P s.
+Proof.
+intros.
+Admitted.
+
+Instance PreOrder_rewt R : PreOrder (rewt R).
+Proof.
+split.
+-
+econstructor.
+-
+hnf.
+intros.
+Admitted.
+
+Lemma rewt_app_L R x x' y : rewt R x x' -> rewt R (y ++ x) (y ++ x').
+Proof.
+induction 1.
+reflexivity.
+inv H.
+replace (y ++ x0 ++ u ++ y1) with ((y ++ x0) ++ u ++ y1).
+econstructor.
+econstructor.
+eassumption.
+simpl_list.
+eassumption.
+Admitted.
+
+Instance Proper_rewt R : Proper (rewt R ==> rewt R ==> rewt R) (@app symbol).
+Proof.
+hnf.
+intros.
+hnf.
+intros.
+induction H.
+-
+now eapply rewt_app_L.
+-
+inv H.
+transitivity (x1 ++ u ++ (y1 ++ x0)).
+now simpl_list.
+econstructor.
+econstructor.
+eassumption.
+rewrite <- IHrewt.
+Admitted.
+
+Lemma rewt_subset R P x y : rewt R x y -> R <<= P -> rewt P x y.
+Proof.
+induction 1; intros.
+-
+reflexivity.
+-
+inv H.
+eapply rewS; eauto.
+eapply rewB.
+Admitted.
+
+Lemma cons_inj {X} (x1 x2 : X) l1 l2 : x1 :: l1 = x2 :: l2 -> x1 = x2 /\ l1 = l2.
+Proof.
+now inversion 1.

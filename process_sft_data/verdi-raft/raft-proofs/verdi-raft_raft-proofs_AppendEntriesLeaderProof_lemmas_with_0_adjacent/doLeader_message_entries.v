@@ -1,0 +1,40 @@
+Require Import VerdiRaft.Raft.
+Require Import VerdiRaft.RaftRefinementInterface.
+Local Arguments update {_} {_} _ _ _ _ _ : simpl never.
+Require Import VerdiRaft.CommonTheorems.
+Require Import VerdiRaft.SpecLemmas.
+Require Import VerdiRaft.AppendEntriesRequestsCameFromLeadersInterface.
+Require Import VerdiRaft.OneLeaderLogPerTermInterface.
+Require Import VerdiRaft.LeaderLogsTermSanityInterface.
+Require Import VerdiRaft.OneLeaderPerTermInterface.
+Require Import VerdiRaft.AppendEntriesLeaderInterface.
+Section AppendEntriesLeader.
+Context {orig_base_params : BaseParams}.
+Context {one_node_params : OneNodeParams orig_base_params}.
+Context {raft_params : RaftParams orig_base_params}.
+Context {rri : raft_refinement_interface}.
+Context {aecfli : append_entries_came_from_leaders_interface}.
+Context {ollpti : one_leaderLog_per_term_interface}.
+Context {lltsi : leaderLogs_term_sanity_interface}.
+Context {olpti : one_leader_per_term_interface}.
+Definition type_term_log_monotonic st st' := type st' = Leader -> type st = Leader /\ currentTerm st' = currentTerm st /\ (forall e, In e (log st) -> In e (log st')).
+Notation appendEntries_leader_predicate ps st := (forall p t lid pli plt es lci e, In p ps -> pBody p = AppendEntries t lid pli plt es lci -> In e es -> currentTerm st = t -> type st = Leader -> In e (log st)).
+Instance appendeli : append_entries_leader_interface.
+Proof.
+split.
+exact appendEntries_leader_invariant.
+End AppendEntriesLeader.
+
+Lemma doLeader_message_entries : forall st h os st' ms m t n pli plt es ci e, doLeader st h = (os, st', ms) -> In m ms -> snd m = AppendEntries t n pli plt es ci -> In e es -> currentTerm st = t /\ type st = Leader /\ In e (log st).
+Proof using.
+intros.
+unfold doLeader, advanceCommitIndex in *.
+break_match; try solve [find_inversion; simpl in *; intuition].
+break_if; try solve [find_inversion; simpl in *; intuition].
+find_inversion.
+simpl.
+do_in_map.
+subst.
+simpl in *.
+find_inversion.
+eauto using findGtIndex_in.

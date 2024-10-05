@@ -1,0 +1,108 @@
+Ltac evar_last := match goal with | |- ?f ?x => let tx := type of x in let tx := eval simpl in tx in let tmp := fresh "tmp" in evar (tmp : tx) ; refine (@eq_ind tx tmp f _ x _) ; unfold tmp ; clear tmp end.
+Require Import Reals mathcomp.ssreflect.ssreflect.
+Require Import Psatz.
+Module MyNat.
+End MyNat.
+Require Import Even Div2.
+Require Import mathcomp.ssreflect.seq mathcomp.ssreflect.ssrbool.
+Open Scope R_scope.
+Definition floor x := proj1_sig (floor_ex x).
+Definition floor1 x := proj1_sig (floor1_ex x).
+Definition nfloor x pr := proj1_sig (nfloor_ex x pr).
+Definition nfloor1 x pr := proj1_sig (nfloor1_ex x pr).
+Fixpoint pow2 (n : nat) : nat := match n with | O => 1%nat | S n => (2 * pow2 n)%nat end.
+Definition pos_div_2 (eps : posreal) := mkposreal _ (is_pos_div_2 eps).
+Definition sign (x : R) := match total_order_T 0 x with | inleft (left _) => 1 | inleft (right _) => 0 | inright _ => -1 end.
+Definition belast {T : Type} (s : seq T) := match s with | [::] => [::] | h :: s => belast h s end.
+
+Lemma sub_succ (n m : nat) : S n - S m = n - m.
+Proof.
+Admitted.
+
+Lemma sub_succ_l (n m : nat) : n <= m -> S m - n = S (m - n).
+Proof.
+move=> h.
+Admitted.
+
+Lemma lt_neq (n m : nat) : n < m -> n <> m.
+Proof.
+intros H ->.
+Admitted.
+
+Lemma minus_0_le (n m : nat) : n <= m -> n - m = 0.
+Proof.
+case: (eq_nat_dec n m) => [-> _ | h h'].
+by rewrite minus_diag.
+apply: not_le_minus_0.
+move=> h''.
+apply: h.
+Admitted.
+
+Lemma sub_succ_r (n m : nat) : n - S m = pred (n - m).
+Proof.
+case: n => [// | n ].
+case: (le_le_S_dec m n) => h; rewrite sub_succ.
+rewrite -minus_Sn_m //=.
+move: (le_S (S n) m h) => /le_S_n h'.
+Admitted.
+
+Lemma sub_add (n m : nat) : n <= m -> m - n + n = m.
+Proof.
+elim: m => [/le_n_0_eq // | m ih h].
+Admitted.
+
+Lemma le_pred_le_succ (n m : nat) : pred n <= m <-> n <= S m.
+Proof.
+case: n m => /= [ | n m].
+split=> _; exact: le_0_n.
+split.
+exact: le_n_S.
+Admitted.
+
+Lemma floor_ex : forall x : R, {n : Z | IZR n <= x < IZR n + 1}.
+Proof.
+intros.
+exists (up (x-1)) ; split.
+assert (Rw : x = 1 + (x-1)) ; [ring | rewrite {2}Rw => {Rw}].
+assert (Rw :IZR (up (x - 1)) = (IZR (up (x - 1)) - (x - 1)) + (x-1)) ; [ring | rewrite Rw ; clear Rw].
+apply Rplus_le_compat_r, (proj2 (archimed _)).
+assert (Rw : x = (x-1) + 1) ; [ring | rewrite {1}Rw ; clear Rw].
+Admitted.
+
+Lemma floor1_ex : forall x : R, {n : Z | IZR n < x <= IZR n + 1}.
+Proof.
+intros.
+destruct (floor_ex x) as (n,(Hn1,Hn2)).
+destruct (Rle_lt_or_eq_dec (IZR n) x Hn1).
+exists n ; split.
+apply r.
+apply Rlt_le, Hn2.
+exists (Z.pred n) ; rewrite <- e ; split.
+apply IZR_lt, Zlt_pred.
+Admitted.
+
+Lemma nfloor_ex : forall x : R, 0 <= x -> {n : nat | INR n <= x < INR n + 1}.
+Proof.
+intros.
+destruct (floor_ex x) as (m,Hm).
+destruct (Z_lt_le_dec m 0) as [z|z].
+apply Zlt_le_succ in z.
+contradict z.
+apply Zlt_not_le.
+apply lt_IZR.
+apply Rle_lt_trans with (1 := H).
+rewrite succ_IZR ; apply Hm.
+destruct m.
+exists O ; apply Hm.
+exists (nat_of_P p).
+rewrite INR_IZR_INZ.
+rewrite <- Zpos_eq_Z_of_nat_o_nat_of_P.
+apply Hm.
+contradict z.
+apply Zlt_not_le.
+Admitted.
+
+Lemma neq_succ_0 (n : nat) : S n <> 0.
+Proof.
+move=> contrad.
+exact: (le_Sn_0 n).

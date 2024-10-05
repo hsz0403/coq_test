@@ -1,0 +1,378 @@
+Require Import Verdi.GhostSimulations.
+Require Import VerdiRaft.Raft.
+Require Import VerdiRaft.RaftRefinementInterface.
+Require Import VerdiRaft.RaftMsgRefinementInterface.
+Require Import VerdiRaft.CommonTheorems.
+Require Import VerdiRaft.SpecLemmas.
+Local Arguments update {_} {_} _ _ _ _ _ : simpl never.
+Require Import VerdiRaft.RefinedLogMatchingLemmasInterface.
+Require Import VerdiRaft.GhostLogCorrectInterface.
+Require Import VerdiRaft.GhostLogsLogPropertiesInterface.
+Require Import VerdiRaft.TermSanityInterface.
+Require Import VerdiRaft.AllEntriesLeaderSublogInterface.
+Require Import VerdiRaft.GhostLogAllEntriesInterface.
+Require Import VerdiRaft.GhostLogLogMatchingInterface.
+Section GhostLogLogMatching.
+Context {orig_base_params : BaseParams}.
+Context {one_node_params : OneNodeParams orig_base_params}.
+Context {raft_params : RaftParams orig_base_params}.
+Context {rmri : raft_msg_refinement_interface}.
+Context {rlmli : refined_log_matching_lemmas_interface}.
+Context {glci : ghost_log_correct_interface}.
+Context {lphogli : log_properties_hold_on_ghost_logs_interface}.
+Context {tsi : term_sanity_interface}.
+Context {aelsi : allEntries_leader_sublog_interface}.
+Context {glaei : ghost_log_allEntries_interface}.
+Definition ghost_log_entries_match_nw (net : network) : Prop := forall p p', In p (nwPackets net) -> In p' (nwPackets net) -> entries_match (fst (pBody p)) (fst (pBody p')).
+Definition ghost_log_entries_match (net : network) : Prop := ghost_log_entries_match_host net /\ ghost_log_entries_match_nw net.
+Definition lifted_entries_contiguous net := forall h, contiguous_range_exact_lo (log (snd (nwState net h))) 0.
+Definition lifted_entries_sorted net := forall h, sorted (log (snd (nwState net h))).
+Definition lifted_entries_contiguous_nw net := forall p t n pli plt es ci, In p (nwPackets net) -> snd (pBody p) = AppendEntries t n pli plt es ci -> contiguous_range_exact_lo es pli.
+Definition lifted_entries_match net := forall h h', entries_match (log (snd (nwState net h))) (log (snd (nwState net h'))).
+Definition lifted_no_entries_past_current_term_host net := forall (h : name) e, In e (log (snd (nwState net h))) -> eTerm e <= currentTerm (snd (nwState net h)).
+Definition lifted_allEntries_leader_sublog (net : network) := forall leader e h, type (snd (nwState net leader)) = Leader -> In e (map snd (allEntries (fst (nwState net h)))) -> eTerm e = currentTerm (snd (nwState net leader)) -> In e (log (snd (nwState net leader))).
+Hint Resolve entries_match_refl : core.
+Hint Resolve entries_match_sym : core.
+Ltac packet_simpl := first [do_in_map; subst; simpl in *; unfold add_ghost_msg in *; do_in_map; subst; simpl in *|subst; simpl in *].
+Arguments write_ghost_log / _ _ _ _ _.
+Instance glemi : ghost_log_entries_match_interface.
+Proof.
+split.
+apply ghost_log_entries_match_invariant.
+End GhostLogLogMatching.
+
+Lemma ghost_log_entries_match_request_vote : msg_refined_raft_net_invariant_request_vote' ghost_log_entries_match.
+Proof using rlmli rmri.
+red.
+split; red; intros; simpl in *; intuition; unfold ghost_log_entries_match in *; break_and.
+-
+repeat find_higher_order_rewrite; destruct_update; simpl in *; eauto.
++
+find_apply_hyp_hyp.
+intuition.
+*
+erewrite handleRequestVote_log; eauto.
+*
+packet_simpl.
+auto.
++
+find_apply_hyp_hyp.
+intuition.
+*
+eauto.
+*
+packet_simpl.
+erewrite handleRequestVote_log with (st'0 := d) by eauto.
+eapply lifted_entries_match_invariant; eauto.
+-
+find_apply_hyp_hyp.
+find_apply_hyp_hyp.
+intuition.
++
+eauto.
++
+subst.
+simpl in *.
+erewrite handleRequestVote_log; eauto.
++
+subst.
+simpl in *.
+erewrite handleRequestVote_log; eauto.
++
+subst.
+simpl in *.
+Admitted.
+
+Lemma ghost_log_entries_match_request_vote_reply : msg_refined_raft_net_invariant_request_vote_reply ghost_log_entries_match.
+Proof using.
+red.
+split; red; intros; simpl in *; intuition; unfold ghost_log_entries_match in *; break_and.
+-
+repeat find_higher_order_rewrite; destruct_update; simpl in *; eauto.
+erewrite handleRequestVoteReply_log; eauto.
+-
+Admitted.
+
+Lemma sorted_entries_match_cons : forall l l' e, sorted (e :: l) -> entries_match l l' -> (~ exists e', eIndex e' = eIndex e /\ eTerm e' = eTerm e /\ In e' l') -> entries_match (e :: l) l'.
+Proof using.
+intros.
+simpl in *.
+intuition.
+unfold entries_match in *.
+split; simpl in *; intuition; subst_max; auto; try solve [find_false; eauto].
+-
+find_apply_hyp_hyp.
+omega.
+-
+eapply H0; eauto.
+-
+right.
+Admitted.
+
+Lemma ghost_log_entries_match_client_request : msg_refined_raft_net_invariant_client_request ghost_log_entries_match.
+Proof using glaei aelsi tsi rlmli rmri.
+red.
+split; red; intros; simpl in *; intuition; unfold ghost_log_entries_match in *; break_and.
+-
+find_copy_apply_lem_hyp handleClientRequest_packets.
+subst.
+simpl in *.
+find_apply_hyp_hyp.
+intuition.
+repeat find_higher_order_rewrite; destruct_update; simpl in *; eauto.
+find_apply_lem_hyp handleClientRequest_log.
+intuition; subst; simpl in *; repeat find_rewrite; eauto.
+break_exists_name e.
+intuition; repeat find_rewrite; simpl in *.
+subst.
+eapply sorted_entries_match_cons; eauto.
++
+simpl.
+intuition; try solve [eapply lifted_entries_sorted_invariant; eauto].
+*
+find_eapply_lem_hyp maxIndex_is_max; eauto; try omega.
+eapply lifted_entries_sorted_invariant; eauto.
+*
+repeat find_rewrite.
+find_eapply_lem_hyp lifted_no_entries_past_current_term_host_invariant; eauto.
++
+intuition.
+break_exists.
+intuition.
+repeat find_rewrite.
+enough (exists x, In x (log (snd (nwState net h0))) /\ eIndex x = eIndex e /\ eTerm x = eTerm e).
+*
+break_exists.
+intuition.
+repeat find_rewrite.
+find_eapply_lem_hyp maxIndex_is_max; eauto; unfold raft_data in *; simpl in *; unfold raft_data in *; simpl in *; [omega|].
+eapply lifted_entries_sorted_invariant; eauto.
+*
+find_eapply_lem_hyp ghost_log_allEntries_invariant; eauto.
+break_exists.
+repeat find_rewrite.
+find_copy_eapply_lem_hyp lifted_allEntries_leader_sublog_invariant; eauto.
+apply in_map_iff.
+eexists; intuition; eauto; auto.
+-
+find_apply_hyp_hyp.
+find_apply_hyp_hyp.
+find_copy_apply_lem_hyp handleClientRequest_packets.
+subst.
+simpl in *.
+Admitted.
+
+Lemma ghost_log_entries_match_timeout : msg_refined_raft_net_invariant_timeout ghost_log_entries_match.
+Proof using rlmli rmri.
+red.
+split; red; intros; simpl in *; intuition; unfold ghost_log_entries_match in *; break_and.
+-
+repeat find_higher_order_rewrite; destruct_update; simpl in *; eauto.
++
+find_apply_hyp_hyp.
+intuition.
+*
+erewrite handleTimeout_log_same; eauto.
+*
+packet_simpl.
+eauto.
++
+find_apply_hyp_hyp.
+intuition.
+packet_simpl.
+erewrite handleTimeout_log_same with (d' := d) by eauto.
+eapply lifted_entries_match_invariant; eauto.
+-
+find_apply_hyp_hyp.
+find_apply_hyp_hyp.
+intuition.
++
+do_in_map.
+subst.
+unfold add_ghost_msg in *.
+do_in_map.
+subst.
+simpl in *.
+erewrite handleTimeout_log_same; eauto.
++
+do_in_map.
+subst.
+unfold add_ghost_msg in *.
+do_in_map.
+subst.
+simpl in *.
+erewrite handleTimeout_log_same; eauto.
++
+repeat do_in_map.
+subst.
+unfold add_ghost_msg in *.
+repeat do_in_map.
+subst.
+simpl in *.
+Admitted.
+
+Lemma ghost_log_entries_match_do_leader : msg_refined_raft_net_invariant_do_leader ghost_log_entries_match.
+Proof using rlmli rmri.
+red.
+intros.
+match goal with | H : nwState ?net ?h = (?gd, ?d) |- _ => replace gd with (fst (nwState net h)) in * by (rewrite H; reflexivity); replace d with (snd (nwState net h)) in * by (rewrite H; reflexivity); clear H end.
+split; red; intros; simpl in *; intuition; unfold ghost_log_entries_match in *; break_and.
+-
+repeat find_higher_order_rewrite; destruct_update; simpl in *; eauto.
++
+find_apply_hyp_hyp.
+intuition.
+*
+erewrite doLeader_log; eauto.
+*
+packet_simpl.
+eauto.
++
+find_apply_hyp_hyp.
+intuition.
+packet_simpl.
+erewrite doLeader_log with (st'0 := d') by eauto.
+eapply lifted_entries_match_invariant; eauto.
+-
+find_apply_hyp_hyp.
+find_apply_hyp_hyp.
+intuition.
++
+do_in_map.
+subst.
+unfold add_ghost_msg in *.
+do_in_map.
+subst.
+simpl in *.
+erewrite doLeader_log; eauto.
++
+do_in_map.
+subst.
+unfold add_ghost_msg in *.
+do_in_map.
+subst.
+simpl in *.
+erewrite doLeader_log; eauto.
++
+repeat do_in_map.
+subst.
+unfold add_ghost_msg in *.
+repeat do_in_map.
+subst.
+simpl in *.
+Admitted.
+
+Lemma ghost_log_entries_match_do_generic_server : msg_refined_raft_net_invariant_do_generic_server ghost_log_entries_match.
+Proof using rlmli rmri.
+red.
+intros.
+match goal with | H : nwState ?net ?h = (?gd, ?d) |- _ => replace gd with (fst (nwState net h)) in * by (rewrite H; reflexivity); replace d with (snd (nwState net h)) in * by (rewrite H; reflexivity); clear H end.
+split; red; intros; simpl in *; intuition; unfold ghost_log_entries_match in *; break_and.
+-
+repeat find_higher_order_rewrite; destruct_update; simpl in *; eauto.
++
+find_apply_hyp_hyp.
+intuition.
+*
+erewrite doGenericServer_log; eauto.
+*
+packet_simpl.
+eauto.
++
+find_apply_hyp_hyp.
+intuition.
+packet_simpl.
+erewrite doGenericServer_log with (st'0 := d') by eauto.
+eapply lifted_entries_match_invariant; eauto.
+-
+find_apply_hyp_hyp.
+find_apply_hyp_hyp.
+intuition.
++
+do_in_map.
+subst.
+unfold add_ghost_msg in *.
+do_in_map.
+subst.
+simpl in *.
+erewrite doGenericServer_log; eauto.
++
+do_in_map.
+subst.
+unfold add_ghost_msg in *.
+do_in_map.
+subst.
+simpl in *.
+erewrite doGenericServer_log; eauto.
++
+repeat do_in_map.
+subst.
+unfold add_ghost_msg in *.
+repeat do_in_map.
+subst.
+simpl in *.
+Admitted.
+
+Lemma ghost_log_entries_match_reboot : msg_refined_raft_net_invariant_reboot ghost_log_entries_match.
+Proof using.
+red.
+intros.
+match goal with | H : nwState ?net ?h = (?gd, ?d) |- _ => replace gd with (fst (nwState net h)) in * by (rewrite H; reflexivity); replace d with (snd (nwState net h)) in * by (rewrite H; reflexivity); clear H end.
+split; red; intros; simpl in *; intuition; unfold ghost_log_entries_match in *; break_and.
+-
+repeat find_higher_order_rewrite; destruct_update; simpl in *; eauto; repeat find_reverse_rewrite; eauto.
+-
+Admitted.
+
+Lemma ghost_log_entries_match_state_same_packet_subset : msg_refined_raft_net_invariant_state_same_packet_subset ghost_log_entries_match.
+Proof using.
+red.
+intros.
+split; red; intros; simpl in *; intuition; unfold ghost_log_entries_match in *; break_and.
+-
+find_apply_hyp_hyp.
+repeat find_reverse_higher_order_rewrite.
+eauto.
+-
+repeat find_apply_hyp_hyp.
+Admitted.
+
+Lemma ghost_log_entries_match_invariant : forall net, msg_refined_raft_intermediate_reachable net -> ghost_log_entries_match net.
+Proof using glaei aelsi tsi lphogli glci rlmli rmri.
+intros.
+apply msg_refined_raft_net_invariant'; auto.
+-
+apply ghost_log_entries_match_init.
+-
+apply msg_refined_raft_net_invariant_client_request'_weak.
+apply ghost_log_entries_match_client_request.
+-
+apply msg_refined_raft_net_invariant_timeout'_weak.
+apply ghost_log_entries_match_timeout.
+-
+apply ghost_log_entries_match_append_entries.
+-
+apply msg_refined_raft_net_invariant_append_entries_reply'_weak.
+apply ghost_log_entries_match_append_entries_reply.
+-
+apply ghost_log_entries_match_request_vote.
+-
+apply msg_refined_raft_net_invariant_request_vote_reply'_weak.
+apply ghost_log_entries_match_request_vote_reply.
+-
+apply msg_refined_raft_net_invariant_do_leader'_weak.
+apply ghost_log_entries_match_do_leader.
+-
+apply msg_refined_raft_net_invariant_do_generic_server'_weak.
+apply ghost_log_entries_match_do_generic_server.
+-
+apply msg_refined_raft_net_invariant_subset'_weak.
+apply ghost_log_entries_match_state_same_packet_subset.
+-
+apply msg_refined_raft_net_invariant_reboot'_weak.
+Admitted.
+
+Instance glemi : ghost_log_entries_match_interface.
+Proof.
+split.
+apply ghost_log_entries_match_invariant.

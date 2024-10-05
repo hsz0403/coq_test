@@ -1,0 +1,16 @@
+Require Import VerdiRaft.Raft.
+Require Import VerdiRaft.CommonTheorems.
+Require Import VerdiRaft.RaftRefinementInterface.
+Require Import VerdiRaft.SpecLemmas.
+Section SpecLemmas.
+Context {orig_base_params : BaseParams}.
+Context {one_node_params : OneNodeParams orig_base_params}.
+Context {raft_params : RaftParams orig_base_params}.
+Context {rri : raft_refinement_interface}.
+End SpecLemmas.
+
+Lemma votesWithLog_update_elections_data_append_entries : forall h st t n pli plt es ci st' ps t' h' l', handleAppendEntries h (snd st) t n pli plt es ci = (st', ps) -> In (t', h', l') (votesWithLog (update_elections_data_appendEntries h st t n pli plt es ci)) -> In (t', h', l') (votesWithLog (fst st)).
+Proof using.
+unfold update_elections_data_appendEntries.
+intros.
+repeat break_match; repeat tuple_inversion; intuition.

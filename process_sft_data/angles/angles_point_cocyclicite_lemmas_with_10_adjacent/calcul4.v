@@ -1,0 +1,269 @@
+Set Implicit Arguments.
+Unset Strict Implicit.
+Require Export point_angle.
+Parameter pisurdeux : AV.
+Axiom double_pisurdeux : R (double pisurdeux) pi.
+Hint Resolve double_pisurdeux.
+Hint Resolve abba.
+Axiom construction_circonscrit : forall M A B : PO, ~ colineaire (vec M A) (vec M B) -> exists O : PO, isocele O A B /\ isocele O A M /\ isocele O B M.
+Definition circonscrit (M A B O : PO) := isocele O A B /\ isocele O A M /\ isocele O B M.
+Definition sont_cocycliques (M A B M' : PO) := ex (fun O : PO => ex (fun O' : PO => (circonscrit M A B O /\ circonscrit M' A B O') /\ colineaire (vec O A) (vec O' A) /\ colineaire (vec O B) (vec O' B))).
+Hint Resolve isocele_sym.
+Axiom cocyclicite_six : forall A B C D : PO, sont_cocycliques C A B D -> ex (fun O : PO => (circonscrit C A B O /\ circonscrit D A B O) /\ isocele O C D).
+Axiom non_zero_pi : ~ R pi zero.
+
+Theorem angle_inscrit : forall A B M O : PO, isocele O M A -> isocele O M B -> R (double (cons (vec M A) (vec M B))) (cons (vec O A) (vec O B)).
+intros A B M O H H0; try assumption.
+unfold double in |- *.
+lapply (triangle_isocele (A:=O) (B:=M) (C:=B)); intros.
+lapply (isocele_permute (A:=O) (B:=M) (C:=A)); intros.
+cut (R (plus (cons (vec O A) (vec O B)) (plus (cons (vec M B) (vec M A)) (cons (vec M B) (vec M A)))) (plus pi pi)).
+intros.
+apply transitive with (plus (plus (cons (vec O A) (vec O B)) (plus (cons (vec M B) (vec M A)) (cons (vec M B) (vec M A)))) (plus (cons (vec M A) (vec M B)) (cons (vec M A) (vec M B)))).
+apply transitive with (plus zero (plus (cons (vec M A) (vec M B)) (cons (vec M A) (vec M B)))).
+apply symetrique.
+apply zero_plus_a.
+apply transitive with (plus (plus pi pi) (plus (cons (vec M A) (vec M B)) (cons (vec M A) (vec M B)))).
+apply compatible.
+apply symetrique.
+apply pi_plus_pi.
+apply reflexive.
+apply transitive with (plus (plus pi pi) (plus (cons (vec M A) (vec M B)) (cons (vec M A) (vec M B)))).
+apply compatible.
+apply reflexive.
+apply reflexive.
+apply compatible.
+apply symetrique.
+try exact H3.
+apply reflexive.
+apply transitive with (plus (cons (vec O A) (vec O B)) (plus (plus (cons (vec M B) (vec M A)) (cons (vec M B) (vec M A))) (plus (cons (vec M A) (vec M B)) (cons (vec M A) (vec M B))))).
+apply symetrique.
+apply point_angle.plus_assoc.
+apply transitive with (plus (cons (vec O A) (vec O B)) zero).
+apply compatible.
+apply reflexive.
+apply transitive with (plus (plus (cons (vec M B) (vec M A)) (cons (vec M A) (vec M B))) (plus (cons (vec M B) (vec M A)) (cons (vec M A) (vec M B)))).
+apply calcul4.
+apply transitive with (plus zero zero).
+apply compatible.
+apply permute.
+apply permute.
+apply zero_plus_a.
+apply plus_zero.
+apply transitive with (plus (plus (cons (vec O A) (vec O M)) (cons (vec O M) (vec O B))) (plus (plus (cons (vec M O) (vec M A)) (cons (vec M B) (vec M O))) (plus (cons (vec M O) (vec M A)) (cons (vec M B) (vec M O))))).
+apply compatible.
+apply symetrique.
+apply Chasles.
+apply compatible.
+apply symetrique.
+apply transitive with (plus (cons (vec M B) (vec M O)) (cons (vec M O) (vec M A))).
+apply plus_sym.
+apply Chasles.
+apply symetrique.
+apply transitive with (plus (cons (vec M B) (vec M O)) (cons (vec M O) (vec M A))).
+apply plus_sym.
+apply Chasles.
+apply transitive with (plus (plus (cons (vec O A) (vec O M)) (plus (cons (vec M O) (vec M A)) (cons (vec M O) (vec M A)))) (plus (cons (vec O M) (vec O B)) (plus (cons (vec M B) (vec M O)) (cons (vec M B) (vec M O))))).
+apply symetrique.
+apply calcul3.
+apply compatible.
+try exact H2.
+try exact H1.
+try exact H.
+Admitted.
+
+Lemma triangle_rectangle : forall A B M O : PO, isocele O M A -> isocele O M B -> orthogonal (vec M A) (vec M B) -> R (cons (vec O A) (vec O B)) pi.
+unfold orthogonal in |- *.
+intros A B M O H H0 H1; try assumption.
+apply transitive with (double (cons (vec M A) (vec M B))).
+apply symetrique; apply angle_inscrit; auto.
+Admitted.
+
+Lemma triangle_diametre : forall A B M O : PO, isocele O M A -> isocele O M B -> R (cons (vec O A) (vec O B)) pi -> orthogonal (vec M A) (vec M B).
+unfold orthogonal in |- *.
+intros A B M O H H0 H1; try assumption.
+apply transitive with (cons (vec O A) (vec O B)).
+apply angle_inscrit; auto.
+Admitted.
+
+Theorem cocyclique : forall M A B O M' : PO, isocele O A B -> isocele O M A -> isocele O M B -> isocele O M' A -> isocele O M' B -> R (double (cons (vec M' A) (vec M' B))) (double (cons (vec M A) (vec M B))).
+intros M A B O M' H H0 H1 H2 H3; try assumption.
+apply transitive with (cons (vec O A) (vec O B)).
+apply angle_inscrit; auto.
+Admitted.
+
+Lemma exists_opp_angle : forall a : AV, exists b : AV, R (plus a b) zero.
+elim non_vide_V; intros u H; clear H; try exact H.
+intros a; try assumption.
+elim angle_cons with (a := a) (u := u); intros v H0; try exact H0.
+exists (cons v u).
+apply transitive with (plus (cons u v) (cons v u)).
+apply compatible; auto.
+Admitted.
+
+Lemma construction_orthogonal : forall u : V, exists v : V, orthogonal v u.
+intros u; try assumption.
+cut (exists v : V, R (double (cons u v)) pi).
+intros H; try assumption.
+elim H; intros v H0; clear H; try exact H0.
+exists v.
+auto.
+elim angle_cons with (a := pisurdeux) (u := u); intros v H0; try exact H0.
+exists v.
+apply transitive with (double pisurdeux).
+auto.
+Admitted.
+
+Lemma unicite_circonscrit : forall M A B O O' : PO, isocele O A B -> isocele O M B -> isocele O M A -> isocele O' A B -> isocele O' M B -> isocele O' M A -> (colineaire (vec O A) (vec O' A) /\ colineaire (vec O B) (vec O' B)) /\ colineaire (vec O M) (vec O' M).
+unfold colineaire in |- *.
+intros M A B O O' H H0 H1 H2 H3 H4.
+cut (R (cons (vec O A) (vec O B)) (cons (vec O' A) (vec O' B))); intros.
+cut (R (double (cons (vec A B) (vec A O))) (double (cons (vec A B) (vec A O')))); intros.
+cut (R (double (cons (vec B O) (vec B A))) (double (cons (vec B O') (vec B A)))); intros.
+split; [ idtac | try assumption ].
+split; [ idtac | try assumption ].
+apply transitive with (double (cons (opp (vec O A)) (opp (vec O' A)))); auto.
+apply transitive with (double (plus (cons (opp (vec O A)) (vec A B)) (cons (vec A B) (opp (vec O' A))))); auto.
+apply transitive with (double (plus (cons (opp (vec O A)) (vec A B)) (cons (vec A B) (opp (vec O' A))))); auto.
+apply transitive with (plus (double (cons (opp (vec O A)) (vec A B))) (double (cons (vec A B) (opp (vec O' A))))); auto.
+apply transitive with (plus (double (cons (opp (vec O A)) (vec A B))) (double (cons (vec A B) (vec A O)))); auto.
+apply compatible; auto.
+apply transitive with (double (cons (vec A B) (vec A O'))); auto.
+apply R_double.
+apply vR_R_compatible; auto.
+apply opp_vect.
+apply transitive with (double (plus (cons (opp (vec O A)) (vec A B)) (cons (vec A B) (vec A O)))); auto.
+apply transitive with (double (plus (cons (vec A O) (vec A B)) (cons (vec A B) (vec A O)))); auto.
+apply R_double.
+apply compatible; auto.
+apply vR_R_compatible; auto.
+apply opp_vect.
+apply transitive with (double zero); auto.
+apply transitive with (double (cons (vec B O) (vec B O'))); auto.
+apply R_double.
+apply transitive with (cons (opp (vec B O)) (opp (vec B O'))); auto.
+apply transitive with (cons (opp (vec B O)) (opp (vec B O'))); auto.
+apply symetrique; auto.
+apply symetrique; auto.
+apply vR_R_compatible; auto.
+apply v_sym; apply opp_vect.
+apply v_sym; apply opp_vect.
+apply transitive with (double (plus (cons (vec B O) (vec B A)) (cons (vec B A) (vec B O')))); auto.
+apply transitive with (plus (double (cons (vec B O) (vec B A))) (double (cons (vec B A) (vec B O')))); auto.
+apply transitive with (plus (double (cons (vec B O) (vec B A))) (double (cons (vec B A) (vec B O)))); auto.
+apply compatible; auto.
+apply transitive with (double (plus (cons (vec B O) (vec B A)) (cons (vec B A) (vec B O)))); auto.
+apply transitive with (double zero); auto.
+apply transitive with (double (cons (vec M O) (vec M O'))); auto.
+apply R_double.
+apply transitive with (cons (opp (vec M O)) (opp (vec M O'))); auto.
+apply symetrique; auto.
+apply vR_R_compatible; auto.
+apply opp_vect.
+apply opp_vect.
+apply transitive with (double (plus (cons (vec M O) (vec M A)) (cons (vec M A) (vec M O')))); auto.
+apply transitive with (plus (double (cons (vec M O) (vec M A))) (double (cons (vec M A) (vec M O')))); auto.
+apply transitive with (double (plus (cons (vec M O) (vec M A)) (cons (vec M A) (vec M O')))); auto.
+apply transitive with (plus (double (cons (vec M O) (vec M A))) (double (cons (vec M A) (vec M O')))); auto.
+apply transitive with (plus (double (cons (vec A M) (vec A O))) (double (cons (vec A O') (vec A M)))); auto.
+apply compatible; auto.
+apply transitive with (double (plus (cons (vec A M) (vec A O)) (cons (vec A O') (vec A M)))); auto.
+apply transitive with (double (cons (vec A O') (vec A O))); auto.
+apply R_double.
+apply transitive with (plus (cons (vec A O') (vec A M)) (cons (vec A M) (vec A O))); auto.
+cut (R (double (cons (vec A O) (vec A O'))) zero); intros.
+apply regulier with (a := double (cons (vec A O) (vec A O'))) (c := zero); auto.
+apply transitive with (double (plus (cons (vec A O) (vec A O')) (cons (vec A O') (vec A O)))); auto.
+apply transitive with (double zero); auto.
+apply transitive with (double (plus (cons (vec A O) (vec A B)) (cons (vec A B) (vec A O')))); auto.
+apply transitive with (plus (double (cons (vec A O) (vec A B))) (double (cons (vec A B) (vec A O')))); auto.
+apply transitive with (plus (double (cons (vec A O) (vec A B))) (double (cons (vec A B) (vec A O)))); auto.
+apply compatible; auto.
+apply transitive with (double (plus (cons (vec A O) (vec A B)) (cons (vec A B) (vec A O)))); auto.
+apply transitive with (double zero); auto.
+apply transitive with (double (cons (vec A B) (vec A O))); auto.
+apply transitive with (double (cons (vec A B) (vec A O'))); auto.
+generalize (triangle_isocele (A:=O) (B:=A) (C:=B)); intros.
+apply regulier with (a := cons (vec O A) (vec O B)) (c := cons (vec O' A) (vec O' B)); auto.
+apply transitive with pi; auto.
+generalize (triangle_isocele (A:=O') (B:=A) (C:=B)); intros.
+apply symetrique; auto.
+apply transitive with (double (cons (vec M A) (vec M B))); auto.
+apply symetrique; apply angle_inscrit; auto.
+auto.
+Admitted.
+
+Lemma construction_isocele_base : forall (A B : PO) (a : AV), exists u : V, (exists v : V, R (cons (vec A B) u) (cons v (vec B A)) /\ R (cons u v) (double a)).
+intros A B a; try assumption.
+elim exists_opp_angle with (a := a); intros a' H; try exact H.
+elim angle_cons with (a := plus pisurdeux a') (u := vec A B); intros u H2; try exact H2.
+elim angle_cons with (a := cons u (vec A B)) (u := vec B A); intros v H3; try exact H3.
+exists u.
+exists v.
+split; [ try assumption | idtac ].
+auto.
+apply transitive with (plus (cons u (vec A B)) (plus (cons (vec A B) (vec B A)) (cons (vec B A) v))); auto.
+apply transitive with (plus (cons u (vec A B)) (plus pi (cons (vec B A) v))); auto.
+apply compatible; auto.
+apply compatible; auto.
+apply transitive with (cons (vec A B) (opp (vec A B))); auto.
+apply vR_R_compatible; auto.
+apply v_sym; apply opp_vect.
+apply transitive with (plus (cons u (vec A B)) (plus (cons (vec B A) v) pi)); auto.
+apply compatible; auto.
+apply transitive with (plus (cons u (vec A B)) (plus (cons u (vec A B)) pi)); auto.
+apply compatible; auto.
+apply compatible; auto.
+apply regulier with (a := plus (plus pisurdeux a') (plus pisurdeux a')) (c := plus (plus pisurdeux a') (plus pisurdeux a')); auto.
+apply transitive with (plus (plus (cons (vec A B) u) (cons (vec A B) u)) (plus (cons u (vec A B)) (plus (cons u (vec A B)) pi))); auto.
+apply compatible; auto.
+apply compatible; auto.
+apply transitive with (plus (plus (cons (vec A B) u) (cons (vec A B) u)) (plus (plus (cons u (vec A B)) (cons u (vec A B))) pi)); auto.
+apply compatible; auto.
+apply transitive with (plus (plus (plus (cons (vec A B) u) (cons (vec A B) u)) (plus (cons u (vec A B)) (cons u (vec A B)))) pi); auto.
+apply transitive with (plus (plus (plus (cons (vec A B) u) (cons u (vec A B))) (plus (cons (vec A B) u) (cons u (vec A B)))) pi); auto.
+apply compatible; auto.
+apply calcul4.
+apply transitive with (plus (plus (cons (vec A B) (vec A B)) (cons (vec A B) (vec A B))) pi); auto.
+apply compatible; auto.
+apply compatible; auto.
+apply transitive with (plus (plus zero zero) pi); auto.
+apply compatible; auto.
+apply compatible; auto.
+apply transitive with (plus (plus (plus a a') (plus a a')) pi); auto.
+apply compatible; auto.
+apply compatible; auto.
+apply transitive with (plus (plus (plus a a) (plus a' a')) pi); auto.
+apply compatible; auto.
+apply calcul4.
+apply transitive with (plus (plus (double a) (plus a' a')) pi); auto.
+apply transitive with (plus (double a) (plus (plus a' a') pi)); auto.
+apply transitive with (plus (plus (plus a' a') pi) (double a)); auto.
+apply compatible; auto.
+apply transitive with (plus (plus a' a') (plus pisurdeux pisurdeux)); auto.
+apply compatible; auto.
+apply transitive with (plus (plus pisurdeux pisurdeux) (plus a' a')); auto.
+Admitted.
+
+Lemma abba : forall A B : PO, R (cons (vec A B) (vec B A)) pi.
+intros A B; try assumption.
+apply transitive with (cons (vec A B) (opp (vec A B))); auto.
+apply vR_R_compatible; auto.
+Admitted.
+
+Lemma calcul5 : forall a b c d : AV, R (plus (plus a (plus b c)) (plus d d)) (plus a (plus (plus d b) (plus d c))).
+intros a b c d; try assumption.
+apply transitive with (plus a (plus (plus b c) (plus d d))); auto.
+apply compatible; auto.
+apply transitive with (plus (plus b d) (plus c d)); auto.
+apply calcul4.
+Admitted.
+
+Lemma calcul4 : forall a b c d : AV, R (plus (plus a b) (plus c d)) (plus (plus a c) (plus b d)).
+intros a b c d; try assumption.
+apply transitive with (plus (plus (plus a b) c) d); auto.
+apply transitive with (plus (plus (plus a c) b) d); auto.
+apply compatible; auto.
+apply transitive with (plus a (plus b c)); auto.
+apply transitive with (plus a (plus c b)); auto.
+apply compatible; auto.

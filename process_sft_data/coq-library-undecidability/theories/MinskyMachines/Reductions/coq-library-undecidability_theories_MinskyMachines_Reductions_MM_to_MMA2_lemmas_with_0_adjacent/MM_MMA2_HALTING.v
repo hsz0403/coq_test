@@ -1,0 +1,17 @@
+Require Import Undecidability.Synthetic.Undecidability.
+From Undecidability.Shared.Libs.DLW Require Import Utils.utils Vec.pos Vec.vec.
+From Undecidability.Shared.Libs.DLW.Code Require Import sss.
+From Undecidability.MinskyMachines Require Import MM FRACTRAN_to_MMA2.
+From Undecidability.FRACTRAN Require Import FRACTRAN MM_FRACTRAN.
+Set Implicit Arguments.
+Check MM_MMA2_HALTING.
+From Undecidability.MinskyMachines Require Import mm_defs mma_defs fractran_mma.
+From Undecidability.FRACTRAN Require Import fractran_utils prime_seq mm_fractran.
+Local Notation "P /MM/ s ↓" := (sss_terminates (@mm_sss _) P s) (at level 70, no associativity).
+Local Notation "P /MMA/ s ↓" := (sss_terminates (@mma_sss 2) P s) (at level 70, no associativity).
+
+Corollary MM_MMA2_HALTING : MM_HALTING ⪯ MMA2_HALTING.
+Proof.
+eapply reduces_transitive.
+exact MM_FRACTRAN_REG_HALTING.
+exact FRACTRAN_REG_MMA2_HALTING.

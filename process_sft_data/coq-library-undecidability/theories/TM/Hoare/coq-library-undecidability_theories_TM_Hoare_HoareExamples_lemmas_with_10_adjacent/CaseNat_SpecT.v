@@ -1,0 +1,399 @@
+From Undecidability.TM Require Import ProgrammingTools.
+From Undecidability Require Import Hoare.HoareLogic Hoare.HoareCombinators Hoare.HoareRegister Hoare.HoareTactics Hoare.HoareTacticsView.
+From Undecidability Require Import CaseNat.
+From Coq Require Import ArithRing.
+Arguments mult : simpl never.
+Arguments plus : simpl never.
+Set Warnings "-undo-batch-mode,-non-interactive".
+Set Default Proof Using "Type".
+From Undecidability Require Import TM.Code.Copy.
+Definition CopyValue_sizefun {sigX X : Type} {cX : codable sigX X} (x : X) : Vector.t (nat->nat) 2 := [|id; CopyValue_size x|].
+Definition MoveValue_size {X Y sigX sigY : Type} {cX : codable sigX X} {cY : codable sigY Y} (x : X) (y : Y) : Vector.t (nat->nat) 2 := [|MoveValue_size_x x; MoveValue_size_y x y|].
+Definition CaseNat_size (n : nat) : Vector.t (nat->nat) 1 := match n with | O => [|id|] | S n' => [|S|] end.
+Ltac hstep_Nat := lazymatch goal with | [ |- TripleT ?P ?k Constr_O ?Q ] => eapply Constr_O_SpecT_size (* We only use register-machines. There is no need to have lemmas without register specifications. This was only done here for demonstration purposes. *) | [ |- TripleT ?P ?k Constr_S ?Q ] => eapply Constr_S_SpecT_size | [ |- TripleT ?P ?k CaseNat ?Q ] => eapply CaseNat_SpecT_size end.
+Smpl Add hstep_Nat : hstep_Spec.
+Definition IncrementTwice_steps := 1 + Constr_S_steps + Constr_S_steps.
+Definition IncrementTwice : pTM sigNat^+ unit 1 := Constr_S;; Constr_S.
+Definition Incr2 : pTM sigNat^+ unit 2 := Constr_S@[|Fin0|];; Constr_S@[|Fin1|].
+Definition Incr2_steps := 1 + Constr_S_steps + Constr_S_steps.
+Definition Incr3 : pTM sigNat^+ unit 3 := Constr_S@[|Fin0|];; Constr_S@[|Fin1|];; IncrementTwice@[|Fin2|].
+Definition Incr3_steps := 2 + Constr_S_steps + Constr_S_steps + IncrementTwice_steps.
+Definition Add_Step : pTM sigNat^+ (option unit) 2 := If (CaseNat @ [|Fin1|]) (Return (Constr_S @ [|Fin0|]) None) (Return Nop (Some tt)).
+Definition Add_Step_Post : nat*nat -> option unit -> Assert sigNat^+ 2 := fun '(a,b) => (fun yout => ≃≃(([yout = if b then Some tt else None] ,[|Contains _ (match b with 0 => a | _ => S a end);Contains _ (pred b)|]))).
+Definition Add_Loop : pTM sigNat^+ unit 2 := While Add_Step.
+Definition Add_Step_steps : nat := 9.
+Definition Add_Step_size (a b : nat) : Vector.t (nat->nat) 2 := match b with | 0 => [|id; id|] | S b' => [|S; S|] end.
+Definition Add_Loop_steps b := 9 + 10 * b.
+Fixpoint Add_Loop_size (a b : nat) : Vector.t (nat->nat) 2 := match b with | O => Add_Step_size a b | S b' => Add_Step_size a b >>> Add_Loop_size (S a) b' end.
+Definition Add : pTM sigNat^+ unit 4 := LiftTapes (CopyValue _) [|Fin1; Fin2|];; (* copy n to a *) LiftTapes (CopyValue _) [|Fin0; Fin3|];; (* copy m to b *) LiftTapes Add_Loop [|Fin2; Fin3|];; (* Main loop *) LiftTapes (Reset _) [|Fin3|].
+Definition Add_steps m n := 98 + 12 * n + 22 * m.
+Definition Add_space (a b : nat) : Vector.t (nat->nat) 4 := [|(*0*) id; (*1*) id; (*2*) CopyValue_size b >> Add_Loop_size b a @>Fin0; (*3*) CopyValue_size a >> (Add_Loop_size b a @>Fin1) >> Reset_size 0 |].
+Definition Mult_Step : pTM sigNat^+ (option unit) 5 := If (LiftTapes CaseNat [|Fin0|]) (Return ( LiftTapes Add [|Fin1; Fin2; Fin3; Fin4|];; (* Add(n, c, c') *) LiftTapes (MoveValue _) [|Fin3; Fin2|] ) (None)) (* continue *) (Return Nop (Some tt)).
+Definition Mult_Step_Post : nat*nat*nat -> option unit -> Assert sigNat^+ 5 := fun '(m',n,c) => (fun yout => ≃≃([yout = if m' then Some tt else None], [|Contains _ (pred m'); Contains _ n; Contains _ ( if m' then c else (n + c)); Void; Void|])).
+Definition Mult_Step_steps m' n c := match m' with | O => 6 | _ => 168 + 33 * c + 39 * n end.
+Definition Mult_Step_space m' n c : Vector.t (nat->nat) 5 := match m' with | 0 => [|id; id; id; id; id|] | S m'' => [| (*0*) S; (*1*) Add_space n c @> Fin0; (* = [id] *) (*2*) (Add_space n c @> Fin1) >> MoveValue_size_y (n+c) c; (*3*) (Add_space n c @> Fin2) >> MoveValue_size_x (n+c); (*4*) (Add_space n c @>Fin3) |] end.
+Definition Mult_Loop := While Mult_Step.
+Fixpoint Mult_Loop_steps m' n c := match m' with | O => S (Mult_Step_steps m' n c) | S m'' => S (Mult_Step_steps m' n c) + Mult_Loop_steps m'' n (n + c) end.
+Fixpoint Mult_Loop_size m' n c := match m' with | 0 => Mult_Step_space m' n c (* [id;...;id] *) | S m'' => Mult_Step_space m' n c >>> Mult_Loop_size m'' n (n+c) end.
+Definition Mult : pTM sigNat^+ unit 6 := LiftTapes (CopyValue _) [|Fin0; Fin5|];; (* m' := m *) LiftTapes (Constr_O) [|Fin2|];; (* c := 0 *) LiftTapes Mult_Loop [|Fin5; Fin1; Fin2; Fin3; Fin4|];; (* Main loop *) LiftTapes (Reset _) [|Fin5|].
+Definition Mult_steps (m n : nat) : nat := 12 * m + Mult_Loop_steps m n 0 + 57.
+Definition Mult_size_bug (m n : nat) : Vector.t (nat->nat) 6 := [|(*0*) id; (*1*) Mult_Loop_size m n 0 @> Fin1; (*2*) Constr_O_size >> Mult_Loop_size m n 0 @> Fin2; (*3*) Mult_Loop_size m n 0 @> Fin3; (*4*) Mult_Loop_size m n 0 @> Fin4; (*5*) CopyValue_size m >> Mult_Loop_size m n 0 @> Fin4 (* Something wrong here! *) |].
+
+Lemma Constr_O_Spec_pure : Triple (fun tin => isVoid tin[@Fin0]) (Constr_O) (fun _ tout => tout[@Fin0] ≃ 0).
+Proof.
+eapply TripleT_Triple.
+Admitted.
+
+Lemma Constr_S_SpecT_pure (y : nat) : TripleT (fun tin => tin[@Fin0] ≃ y) (Constr_S_steps) (Constr_S) (fun _ tout => tout[@Fin0] ≃ S y).
+Proof.
+eapply RealiseIn_TripleT.
+-
+apply Constr_S_Sem.
+-
+intros tin [] tout H1 H2.
+cbn in *.
+unfold tspec in *.
+modpon H1.
+Admitted.
+
+Lemma Constr_S_Spec_pure (y : nat) : Triple (fun tin => tin[@Fin0] ≃ y) (Constr_S) (fun _ tout => tout[@Fin0] ≃ (S y)).
+Proof.
+eapply TripleT_Triple.
+Admitted.
+
+Lemma Constr_O_SpecT_size (ss : Vector.t nat 1) : TripleT (≃≃([], withSpace ( [|Void|]) ss)) Constr_O_steps Constr_O (fun _ => ≃≃([], withSpace ( [|Contains _ 0|]) (appSize [|Constr_O_size|] ss))).
+Proof.
+start_TM.
+eapply RealiseIn_TripleT.
+-
+apply Constr_O_Sem.
+-
+intros tin [] tout H1 H2.
+unfold withSpace in H2.
+cbn in *.
+unfold tspec in *.
+specialize (H2 Fin0).
+simpl_vector in *; cbn in *.
+modpon H1.
+hnf.
+Admitted.
+
+Lemma Constr_O_SpecT : TripleT (≃≃([], [|Void|])) Constr_O_steps Constr_O (fun _ => ≃≃([], [|Contains _ 0|])).
+Proof.
+Admitted.
+
+Lemma Constr_O_Spec : Triple (≃≃([], [|Void|])) Constr_O (fun _ => ≃≃([], [|Contains _ 0|])).
+Proof.
+eapply TripleT_Triple.
+Admitted.
+
+Lemma Constr_S_SpecT_size : forall (y : nat) ss, TripleT (≃≃([], withSpace ( [|Contains _ y|]) ss)) Constr_S_steps Constr_S (fun _ => ≃≃([], withSpace ( [|Contains _ (S y)|]) (appSize [|S|] ss))).
+Proof.
+intros y ss.
+start_TM.
+eapply RealiseIn_TripleT.
+-
+apply Constr_S_Sem.
+-
+intros tin [] tout H HEnc.
+unfold withSpace in *|-.
+cbn in *.
+specialize (HEnc Fin0).
+simpl_vector in *; cbn in *.
+modpon H.
+hnf.
+Admitted.
+
+Lemma Constr_S_SpecT : forall (y : nat), TripleT (≃≃([], [|Contains _ y|])) Constr_S_steps Constr_S (fun _ => ≃≃([], [|Contains _ (S y)|])).
+Proof.
+intros.
+Admitted.
+
+Lemma Constr_S_Spec : forall (y : nat), Triple (≃≃([], [|Contains _ y|])) Constr_S (fun _ => ≃≃([], [|Contains _ (S y)|])).
+Proof.
+intros y.
+eapply TripleT_Triple.
+Admitted.
+
+Lemma CaseNat_SpecT_size (y : nat) (ss : Vector.t nat 1) : TripleT (≃≃([], withSpace ( [|Contains _ y|]) ss)) CaseNat_steps CaseNat (fun yout => tspec ([if yout then y <> 0 else y = 0], (withSpace [|Contains _ (pred y)|] (appSize (CaseNat_size y) ss)))).
+Proof.
+start_TM.
+eapply RealiseIn_TripleT.
+-
+apply CaseNat_Sem.
+-
+intros tin yout tout H HEnc.
+unfold withSpace in *|-.
+specialize (HEnc Fin0).
+simpl_vector in *; cbn in *.
+modpon H.
+destruct yout, y; cbn in *; auto.
++
+hnf.
+split.
+easy.
+intros i; destruct_fin i; cbn; eauto.
++
+hnf.
+split.
+easy.
+Admitted.
+
+Lemma CaseNat_Spec (y : nat) : Triple (≃≃([], [|Contains _ y|])) CaseNat (fun yout => tspec ([if yout then y <> 0 else y = 0],[|Contains _ (pred y)|])).
+Proof.
+eapply TripleT_Triple.
+Admitted.
+
+Lemma Constr_S_Spec_con (n : nat) (Q : Assert sigNat^+ 1) : (forall tout, ≃≃([], [|Contains _ (S n)|]) tout -> Q tout) -> Triple (≃≃([], [|Contains _ n|])) Constr_S (fun _ => Q).
+Proof.
+Admitted.
+
+Lemma IncrementTwice_Spec_pure (y : nat) : Triple (fun tin => tin[@Fin0] ≃ y) (IncrementTwice) (fun _ tout => tout[@Fin0] ≃ S (S y)).
+Proof.
+start_TM.
+eapply Seq_Spec.
+-
+apply Constr_S_Spec_pure.
+-
+cbn.
+intros _.
+apply Constr_S_Spec_pure.
+Restart.
+start_TM.
+unfold IncrementTwice.
+hsteps.
+apply Constr_S_Spec_pure.
+cbn.
+intros _.
+Admitted.
+
+Lemma IncrementTwice_SpecT_pure (y : nat) : TripleT (fun tin => tin[@Fin0] ≃ y) (IncrementTwice_steps) (IncrementTwice) (fun _ tout => tout[@Fin0] ≃ S (S y)).
+Proof.
+start_TM.
+eapply Seq_SpecT.
+-
+apply Constr_S_SpecT_pure.
+-
+cbn.
+intros _.
+apply Constr_S_SpecT_pure.
+-
+reflexivity.
+Restart.
+start_TM.
+unfold IncrementTwice.
+hsteps.
+apply Constr_S_SpecT_pure.
+cbn.
+intros _.
+apply Constr_S_SpecT_pure.
+Admitted.
+
+Lemma IncrementTwice_Spec (y : nat) : Triple (≃≃([], [|Contains _ y|])) (IncrementTwice) (fun _ => ≃≃([], [|Contains _ (S (S y))|])).
+Proof.
+start_TM.
+eapply Seq_Spec.
+-
+apply Constr_S_Spec.
+-
+cbn.
+intros _.
+apply Constr_S_Spec.
+Restart.
+start_TM.
+unfold IncrementTwice.
+hstep.
+apply Constr_S_Spec.
+cbn.
+intros _.
+apply Constr_S_Spec.
+Restart.
+start_TM.
+unfold IncrementTwice.
+hsteps_cbn.
+Admitted.
+
+Lemma IncrementTwice_SpecT (y : nat) : TripleT (≃≃([], [|Contains _ y|])) (IncrementTwice_steps) (IncrementTwice) (fun _ => ≃≃([], [|Contains _ (S (S y))|])).
+Proof.
+start_TM.
+eapply Seq_SpecT.
+-
+apply Constr_S_SpecT.
+-
+cbn.
+intros _.
+apply Constr_S_SpecT.
+-
+reflexivity.
+Restart.
+start_TM.
+unfold IncrementTwice.
+hstep.
+apply Constr_S_SpecT.
+cbn.
+intros _.
+apply Constr_S_SpecT.
+Restart.
+unfold IncrementTwice.
+hsteps_cbn.
+eauto.
+Admitted.
+
+Lemma Incr2_Spec : forall (x y : nat), Triple (≃≃([], [|Contains _ x; Contains _ y|])) Incr2 (fun _ => ≃≃([], [|Contains _ (S x); Contains _ (S y)|])).
+Proof.
+intros x y.
+start_TM.
+eapply Seq_Spec.
+-
+eapply LiftTapes_Spec.
++
+smpl_dupfree.
++
+cbn.
+apply Constr_S_Spec.
+-
+cbn.
+intros _.
+eapply LiftTapes_Spec_con.
++
+smpl_dupfree.
++
+cbn.
+apply Constr_S_Spec.
++
+cbn.
+auto.
+Restart.
+intros x y.
+unfold Incr2.
+hsteps_cbn.
+Admitted.
+
+Lemma Incr2_SpecT : forall (x y : nat), TripleT (≃≃([], [|Contains _ x; Contains _ y|])) Incr2_steps Incr2 (fun _ => ≃≃([], [|Contains _ (S x); Contains _ (S y)|])).
+Proof.
+intros x y.
+start_TM.
+eapply Seq_SpecT.
+-
+eapply LiftTapes_SpecT.
++
+smpl_dupfree.
++
+cbn.
+apply Constr_S_SpecT.
+-
+intros [].
+cbn [Frame].
+eapply LiftTapes_SpecT_con.
++
+smpl_dupfree.
++
+cbn.
+apply Constr_S_SpecT.
++
+cbn.
+auto.
+-
+reflexivity.
+Restart.
+intros x y.
+unfold Incr2.
+hsteps_cbn.
+Admitted.
+
+Lemma Incr3_Spec : forall (x y z : nat), Triple (≃≃([], [|Contains _ x; Contains _ y; Contains _ z|])) Incr3 (fun _ => ≃≃([], [|Contains _ (S x); Contains _ (S y); Contains _ (S (S z))|])).
+Proof.
+intros x y z.
+start_TM.
+eapply Seq_Spec.
+-
+eapply LiftTapes_Spec.
++
+smpl_dupfree.
++
+cbn.
+apply Constr_S_Spec.
+-
+intros [].
+cbn [Frame].
+eapply Seq_Spec.
++
+eapply LiftTapes_Spec.
+*
+smpl_dupfree.
+*
+cbn.
+apply Constr_S_Spec.
++
+intros [].
+cbn [Frame].
+eapply LiftTapes_Spec_con.
+*
+smpl_dupfree.
+*
+cbn.
+apply IncrementTwice_Spec.
+*
+cbn.
+auto.
+Restart.
+intros x y z.
+unfold Incr3.
+hsteps_cbn.
+apply IncrementTwice_Spec.
+cbn.
+Admitted.
+
+Lemma Incr3_SpecT : forall (x y z : nat), TripleT (≃≃([], [|Contains _ x; Contains _ y; Contains _ z|])) (Incr3_steps) Incr3 (fun _ => ≃≃([], [|Contains _ (S x); Contains _ (S y); Contains _ (S (S z))|])).
+Proof.
+intros x y z.
+start_TM.
+eapply Seq_SpecT.
+-
+eapply LiftTapes_SpecT.
++
+smpl_dupfree.
++
+cbn.
+apply Constr_S_SpecT.
+-
+intros [].
+cbn [Frame].
+eapply Seq_SpecT.
++
+eapply LiftTapes_SpecT.
+*
+smpl_dupfree.
+*
+cbn.
+apply Constr_S_SpecT.
++
+intros [].
+cbn [Frame].
+eapply LiftTapes_SpecT_con.
+*
+smpl_dupfree.
+*
+cbn.
+apply IncrementTwice_SpecT.
+*
+cbn.
+auto.
++
+reflexivity.
+-
+reflexivity.
+Restart.
+intros x y z.
+unfold Incr3.
+hsteps_cbn.
+apply IncrementTwice_SpecT.
+cbn.
+eauto.
+reflexivity.
+Admitted.
+
+Lemma CaseNat_SpecT (y : nat) : TripleT (≃≃([], [|Contains _ y|])) CaseNat_steps CaseNat (fun yout => tspec ([if yout then y <> 0 else y = 0],[|Contains _ (pred y)|])).
+Proof.
+eapply TripleT_RemoveSpace.
+apply CaseNat_SpecT_size.

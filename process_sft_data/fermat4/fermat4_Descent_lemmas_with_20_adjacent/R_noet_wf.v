@@ -1,0 +1,22 @@
+Require Export Wf_nat.
+Require Export ZArith.
+Open Scope Z_scope.
+Definition R_noet (x y : nat * nat) : Prop := ((fst x) + (snd x) < (fst y) + (snd y))%nat.
+Definition f (x : nat * nat) := ((fst x) + (snd x))%nat.
+
+Lemma noetherian : forall P : nat * nat -> Prop, (forall z : nat * nat, (forall y : nat * nat, (fst(y) + snd(y) < fst(z) + snd(z))%nat -> P y) -> P z) -> forall x : nat * nat, P x.
+Proof.
+Admitted.
+
+Lemma infinite_descent_nat : forall P : nat * nat -> Prop, (forall x : nat * nat, (P x -> exists y : nat * nat, (fst(y) + snd(y) < fst(x) + snd(x))%nat /\ P y)) -> forall x : nat * nat, ~(P x).
+Proof.
+Admitted.
+
+Lemma infinite_descent : forall P : Z -> Z -> Prop, (forall x1 x2 : Z, 0 <= x1 -> 0 <= x2 -> (P x1 x2 -> exists y1 : Z, exists y2 : Z, 0 <= y1 /\ 0 <= y2 /\ y1 + y2 < x1 + x2 /\ P y1 y2)) -> forall x y: Z, 0 <= x -> 0 <= y -> ~(P x y).
+Proof.
+intros; elim (Z_of_nat_complete _ H0); clear H0; intros; elim (Z_of_nat_complete _ H1); clear H1; intros; rewrite H0; rewrite H1; clear H0 H1; generalize (infinite_descent_nat (fun c => P (Z_of_nat (fst c)) (Z_of_nat (snd c)))); intro; cut (~( P (Z_of_nat (fst (x0, x1))) (Z_of_nat (snd (x0, x1))))); auto.
+Admitted.
+
+Lemma R_noet_wf : well_founded R_noet.
+Proof.
+apply (well_founded_lt_compat _ f R_noet); auto.

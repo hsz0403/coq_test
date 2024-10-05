@@ -1,0 +1,633 @@
+Require Import Verdi.GhostSimulations.
+Require Import VerdiRaft.Raft.
+Local Arguments update {_} {_} _ _ _ _ _ : simpl never.
+Require Import VerdiRaft.RaftRefinementInterface.
+Require Import VerdiRaft.CommonTheorems.
+Require Import VerdiRaft.SpecLemmas.
+Require Import VerdiRaft.PrefixWithinTermInterface.
+Require Import VerdiRaft.LogsLeaderLogsInterface.
+Require Import VerdiRaft.RefinedLogMatchingLemmasInterface.
+Require Import VerdiRaft.OneLeaderLogPerTermInterface.
+Require Import VerdiRaft.LeaderLogsSortedInterface.
+Require Import VerdiRaft.LeaderLogsSublogInterface.
+Require Import VerdiRaft.LeaderSublogInterface.
+Require Import VerdiRaft.NextIndexSafetyInterface.
+Require Import VerdiRaft.LeaderLogsContiguousInterface.
+Require Import VerdiRaft.AllEntriesLogMatchingInterface.
+Require Import VerdiRaft.AppendEntriesRequestTermSanityInterface.
+Require Import VerdiRaft.AllEntriesLeaderSublogInterface.
+Section PrefixWithinTerm.
+Context {orig_base_params : BaseParams}.
+Context {one_node_params : OneNodeParams orig_base_params}.
+Context {raft_params : RaftParams orig_base_params}.
+Context {rri : raft_refinement_interface}.
+Context {llli : logs_leaderLogs_interface}.
+Context {rlmli : refined_log_matching_lemmas_interface}.
+Context {ollpti : one_leaderLog_per_term_interface}.
+Context {llsi : leaderLogs_sorted_interface}.
+Context {llsli : leaderLogs_sublog_interface}.
+Context {lsli : leader_sublog_interface}.
+Context {nisi : nextIndex_safety_interface}.
+Context {llci : leaderLogs_contiguous_interface}.
+Context {aelmi : allEntries_log_matching_interface}.
+Context {aertsi : append_entries_request_term_sanity_interface}.
+Context {aelsi : allEntries_leader_sublog_interface}.
+Definition lift_leader_sublog : forall net leader e h, refined_raft_intermediate_reachable net -> type (snd (nwState net leader)) = Leader -> In e (log (snd (nwState net h))) -> eTerm e = currentTerm (snd (nwState net leader)) -> In e (log (snd (nwState net leader))).
+Proof using lsli rri.
+intros.
+pose proof lift_prop leader_sublog_host_invariant.
+conclude_using ltac:(apply leader_sublog_invariant_invariant).
+find_apply_hyp_hyp.
+match goal with | H : leader_sublog_host_invariant _ |- _ => specialize (H leader e h) end.
+repeat find_rewrite_lem deghost_spec.
+intuition.
+Definition lift_leader_sublog_nw : forall net leader p t leaderId prevLogIndex prevLogTerm entries leaderCommit e, refined_raft_intermediate_reachable net -> type (snd (nwState net leader)) = Leader -> In p (nwPackets net) -> pBody p = AppendEntries t leaderId prevLogIndex prevLogTerm entries leaderCommit -> In e entries -> eTerm e = currentTerm (snd (nwState net leader)) -> In e (log (snd (nwState net leader))).
+Proof using lsli rri.
+intros.
+pose proof lift_prop leader_sublog_nw_invariant.
+conclude_using ltac:(apply leader_sublog_invariant_invariant).
+find_apply_hyp_hyp.
+find_apply_lem_hyp exists_deghosted_packet.
+match goal with | H : exists _, _ |- _ => destruct H as [q] end.
+break_and.
+match goal with | H : leader_sublog_nw_invariant _ |- _ => specialize (H leader q t leaderId prevLogIndex prevLogTerm entries leaderCommit e) end.
+repeat find_rewrite_lem deghost_spec.
+subst.
+simpl in *.
+intuition.
+Definition append_entries_append_entries_prefix_within_term_nw net := forall p t n pli plt es ci p' t' n' pli' plt' es' ci' e e', In p (nwPackets net) -> pBody p = AppendEntries t n pli plt es ci -> In p' (nwPackets net) -> pBody p' = AppendEntries t' n' pli' plt' es' ci' -> eTerm e = eTerm e' -> eIndex e <= eIndex e' -> In e es -> In e' es' -> (In e es' \/ (eIndex e = pli' /\ eTerm e = plt') \/ (eIndex e < pli' /\ eTerm e <= plt')).
+Definition locked_or x y := x \/ y.
+Definition log_leaderLogs_prefix_within_term net := forall h t ll leader, In (t, ll) (leaderLogs (fst (nwState net leader))) -> prefix_within_term (log (snd (nwState net h))) ll.
+Definition allEntries_log_prefix_within_term net := forall h h', prefix_within_term (map snd (allEntries (fst (nwState net h)))) (log (snd (nwState net h'))).
+Definition allEntries_append_entries_prefix_within_term_nw net := forall p t n pli plt es ci h e e', In p (nwPackets net) -> pBody p = AppendEntries t n pli plt es ci -> eTerm e = eTerm e' -> eIndex e <= eIndex e' -> In e (map snd (allEntries (fst (nwState net h)))) -> In e' es -> (In e es \/ (eIndex e = pli /\ eTerm e = plt) \/ (eIndex e < pli /\ eTerm e <= plt)).
+Definition append_entries_leaderLogs_prefix_within_term net := forall p t n pli plt es ci h t' ll, In p (nwPackets net) -> pBody p = AppendEntries t n pli plt es ci -> In (t', ll) (leaderLogs (fst (nwState net h))) -> prefix_within_term es ll.
+Definition append_entries_log_prefix_within_term net := forall p t n pli plt es ci h, In p (nwPackets net) -> pBody p = AppendEntries t n pli plt es ci -> prefix_within_term es (log (snd (nwState net h))).
+Definition prefix_within_term_inductive net := allEntries_leaderLogs_prefix_within_term net /\ log_leaderLogs_prefix_within_term net /\ allEntries_log_prefix_within_term net /\ allEntries_append_entries_prefix_within_term_nw net /\ append_entries_leaderLogs_prefix_within_term net /\ append_entries_log_prefix_within_term net.
+Instance pwti : prefix_within_term_interface.
+split; intros.
+-
+apply prefix_within_term_inductive_invariant.
+auto.
+-
+apply log_log_prefix_within_term_invariant.
+auto.
+Defined.
+End PrefixWithinTerm.
+
+Definition lift_leader_sublog : forall net leader e h, refined_raft_intermediate_reachable net -> type (snd (nwState net leader)) = Leader -> In e (log (snd (nwState net h))) -> eTerm e = currentTerm (snd (nwState net leader)) -> In e (log (snd (nwState net leader))).
+Proof using lsli rri.
+intros.
+pose proof lift_prop leader_sublog_host_invariant.
+conclude_using ltac:(apply leader_sublog_invariant_invariant).
+find_apply_hyp_hyp.
+match goal with | H : leader_sublog_host_invariant _ |- _ => specialize (H leader e h) end.
+repeat find_rewrite_lem deghost_spec.
+Admitted.
+
+Lemma exists_deghosted_packet : forall net (p : packet (params := raft_refined_multi_params (raft_params := raft_params))), In p (nwPackets net) -> exists q, In q (nwPackets (deghost net)) /\ q = deghost_packet p.
+Proof using.
+unfold deghost.
+simpl.
+intros.
+eexists; intuition eauto.
+apply in_map_iff.
+Admitted.
+
+Definition lift_leader_sublog_nw : forall net leader p t leaderId prevLogIndex prevLogTerm entries leaderCommit e, refined_raft_intermediate_reachable net -> type (snd (nwState net leader)) = Leader -> In p (nwPackets net) -> pBody p = AppendEntries t leaderId prevLogIndex prevLogTerm entries leaderCommit -> In e entries -> eTerm e = currentTerm (snd (nwState net leader)) -> In e (log (snd (nwState net leader))).
+Proof using lsli rri.
+intros.
+pose proof lift_prop leader_sublog_nw_invariant.
+conclude_using ltac:(apply leader_sublog_invariant_invariant).
+find_apply_hyp_hyp.
+find_apply_lem_hyp exists_deghosted_packet.
+match goal with | H : exists _, _ |- _ => destruct H as [q] end.
+break_and.
+match goal with | H : leader_sublog_nw_invariant _ |- _ => specialize (H leader q t leaderId prevLogIndex prevLogTerm entries leaderCommit e) end.
+repeat find_rewrite_lem deghost_spec.
+subst.
+simpl in *.
+Admitted.
+
+Theorem append_entries_append_entries_prefix_within_term_invariant : forall net, refined_raft_intermediate_reachable net -> append_entries_append_entries_prefix_within_term_nw net.
+Proof using llsi ollpti rlmli llli.
+red.
+intros.
+match goal with | H : context [pBody], H' : context [pBody] |- _ => copy_eapply logs_leaderLogs_nw_invariant H; eauto; copy_eapply logs_leaderLogs_nw_invariant H'; eauto end; repeat conclude_using eauto.
+break_exists; break_and.
+repeat find_rewrite.
+match goal with | H : refined_raft_intermediate_reachable _ |- _ => copy_apply leaderLogs_sorted_invariant H end.
+find_eapply_lem_hyp one_leaderLog_per_term_log_invariant; eauto.
+conclude_using eauto.
+subst.
+intuition; subst.
+-
+destruct (lt_eq_lt_dec (eIndex e) pli'); intuition.
+left.
+match goal with | H : removeAfterIndex ?l ?index = ?es ++ ?ll |- _ => eapply app_contiguous_maxIndex_le_eq in H end; [|idtac|eapply removeAfterIndex_contiguous; [eapply entries_sorted_nw_invariant; eauto|eapply entries_contiguous_nw_invariant; eauto]|idtac]; eauto; [|omega].
+assert (exists e'', eIndex e'' = eIndex e /\ In e'' es') by (eapply entries_contiguous_nw_invariant; eauto; intuition; eapply le_trans; eauto; eapply maxIndex_is_max; eauto; eapply entries_sorted_nw_invariant; eauto).
+break_exists.
+intuition.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In ?x ?l, _ : eIndex ?x = _ |- _ => assert (In x (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+subst.
+find_apply_hyp_hyp.
+eapply entries_match_nw_1_invariant in H1; eauto.
+apply H1; eauto.
+repeat find_rewrite; auto.
+-
+break_exists.
+break_and.
+match goal with | H : _ \/ _ |- _ => clear H end.
+subst.
+left.
+assert (pli < eIndex e) by (eapply entries_contiguous_nw_invariant; [idtac|idtac|eauto|]; eauto).
+assert (maxIndex x4 < eIndex e) by omega.
+assert (eIndex x0 < eIndex e).
+eapply le_lt_trans; [|eauto].
+eapply maxIndex_is_max; eauto.
+assert (exists e'', eIndex e'' = eIndex e /\ In e'' es') by (eapply entries_contiguous_nw_invariant; eauto; intuition; eapply le_trans; eauto; eapply maxIndex_is_max; eauto; eapply entries_sorted_nw_invariant; eauto).
+break_exists.
+intuition.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In ?x ?l, _ : eIndex ?x = _ |- _ => assert (In x (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+subst.
+repeat find_rewrite.
+do_in_app.
+intuition.
++
+find_apply_hyp_hyp.
+eapply entries_match_nw_1_invariant.
+10: {
+eauto.
+}
+5: {
+eauto.
+}
+4: {
+eauto.
+}
+all:eauto; try omega.
+repeat find_rewrite; auto.
++
+exfalso.
+find_eapply_lem_hyp Prefix_maxIndex; eauto.
+omega.
+-
+left.
+assert (0 < eIndex e) by (eapply entries_gt_0_nw_invariant; [|idtac|idtac|eauto]; [|idtac|eauto]; eauto).
+assert (pli < eIndex e) by (eapply entries_contiguous_nw_invariant; [|idtac|idtac|eauto]; [|idtac|eauto]; eauto).
+assert (exists e'', eIndex e'' = eIndex e /\ In e'' es') by (eapply entries_contiguous_nw_invariant; eauto; intuition; eapply le_trans; eauto; eapply maxIndex_is_max; eauto; eapply entries_sorted_nw_invariant; eauto).
+break_exists.
+intuition.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In ?x ?l, _ : eIndex ?x = _ |- _ => assert (In x (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+subst.
+repeat find_rewrite.
+do_in_app.
+intuition.
++
+find_apply_hyp_hyp.
+eapply entries_match_nw_1_invariant.
+10: {
+eauto.
+}
+5: {
+eauto.
+}
+4: {
+eauto.
+}
+all:eauto; try omega.
+repeat find_rewrite; auto.
++
+exfalso.
+find_eapply_lem_hyp Prefix_maxIndex; eauto.
+omega.
+-
+break_exists.
+break_and.
+match goal with | H : _ \/ _ |- _ => clear H end.
+subst.
+destruct (lt_eq_lt_dec (eIndex e) pli'); intuition.
+left.
+assert (exists e'', eIndex e'' = eIndex e /\ In e'' es') by (eapply entries_contiguous_nw_invariant; eauto; intuition; eapply le_trans; eauto; eapply maxIndex_is_max; eauto; eapply entries_sorted_nw_invariant; eauto).
+break_exists.
+intuition.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In ?x ?l, _ : eIndex ?x = _ |- _ => assert (In x (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+subst.
+repeat find_rewrite.
+do_in_app.
+intuition.
++
+find_apply_hyp_hyp.
+eapply entries_match_nw_1_invariant.
+10: {
+eauto.
+}
+5: {
+eauto.
+}
+4: {
+eauto.
+}
+all:eauto; try omega.
+repeat find_rewrite; auto.
++
+exfalso.
+find_eapply_lem_hyp Prefix_maxIndex; eauto.
+omega.
+-
+destruct (lt_eq_lt_dec (eIndex e) pli'); intuition.
+left.
+assert (exists e'', eIndex e'' = eIndex e /\ In e'' es') by (eapply entries_contiguous_nw_invariant; eauto; intuition; eapply le_trans; eauto; eapply maxIndex_is_max; eauto; eapply entries_sorted_nw_invariant; eauto).
+break_exists.
+intuition.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In ?x ?l, _ : eIndex ?x = _ |- _ => assert (In x (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+subst.
+repeat find_rewrite.
+do_in_app.
+intuition.
++
+find_apply_hyp_hyp.
+eapply entries_match_nw_1_invariant.
+10: {
+eauto.
+}
+5: {
+eauto.
+}
+4: {
+eauto.
+}
+all:eauto; try omega.
+repeat find_rewrite; auto.
++
+exfalso.
+find_eapply_lem_hyp Prefix_maxIndex; eauto.
+omega.
+-
+break_exists.
+break_and.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In e ?l |- _ => assert (In e (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In e' ?l |- _ => assert (In e' (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+subst.
+repeat match goal with | _ : removeAfterIndex ?es _ = ?x ++ ?y, Hp : pBody _ = AppendEntries _ _ ?i _ ?es _ |- _ => try match goal with | _ : sorted (x ++ y) |- _ => fail 2 end; assert (sorted (x ++ y)) by (repeat find_reverse_rewrite; eapply removeAfterIndex_sorted; eapply entries_sorted_nw_invariant; try apply Hp; eauto); assert (contiguous_range_exact_lo (x ++ y) i) by (repeat find_reverse_rewrite; eapply removeAfterIndex_contiguous; [eapply entries_sorted_nw_invariant; try apply Hp; eauto| eapply entries_contiguous_nw_invariant; try apply Hp; eauto]) end.
+repeat match goal with | H : ?x \/ ?y |- _ => copy_eapply contiguous_app_prefix_contiguous H; eauto; fold (locked_or x y) in H end.
+match goal with | H : removeAfterIndex _ _ = _ |- _ => assert (forall e, In e x1 -> In e es') by (intros; eapply removeAfterIndex_in; rewrite H; apply in_app_iff; intuition) end.
+match goal with | H : removeAfterIndex _ _ = _ |- _ => assert (forall e, In e x2 -> In e es') by (intros; eapply removeAfterIndex_in; rewrite H; apply in_app_iff; intuition) end.
+match goal with | H : removeAfterIndex _ _ = _ |- _ => assert (forall e, In e x5 -> In e es) by (intros; eapply removeAfterIndex_in; rewrite H; apply in_app_iff; intuition) end.
+repeat find_rewrite.
+repeat do_in_app.
+intuition.
++
+subst.
+assert (exists e'', eIndex e'' = eIndex e /\ In e'' x1).
+{
+eapply_prop (contiguous_range_exact_lo x1).
+intuition.
+match goal with | H : contiguous_range_exact_lo ?l ?i , _ : In ?e ?l |- ?i < eIndex ?e => eapply H end; eauto.
+eapply le_trans; eauto.
+eapply maxIndex_is_max; eauto using sorted_app_1.
+}
+break_exists.
+break_and.
+left.
+find_copy_apply_hyp_hyp.
+match goal with | H : refined_raft_intermediate_reachable _ |- _ => copy_apply entries_match_nw_1_invariant H end.
+match goal with | H : entries_match_nw_1 _ |- _ => eapply H with (es := es) (p := p) (p' := p') end.
+all:eauto.
+all:intuition.
+*
+eapply_prop_hyp eTerm In.
+congruence.
+*
+replace (eIndex e) with (eIndex x8).
+eapply_prop (contiguous_range_exact_lo (x1 ++ x2)); eauto.
+in_crush.
++
+exfalso.
+find_eapply_lem_hyp Prefix_maxIndex; [|idtac|eauto]; eauto.
+match goal with | H: contiguous_range_exact_lo ?l ?i, _ : In ?e ?l, _ : eIndex _ <= ?i |- _ => assert (i < eIndex e) by (eapply H; eauto) end.
+omega.
++
+assert (In e x4) by eauto using Prefix_In.
+match goal with | _ : removeAfterIndex ?es _ = ?l, _ : contiguous_range_exact_lo ?l ?i |- context [In ?e ?es] => destruct (lt_eq_lt_dec (eIndex e) i); intuition end.
+*
+right.
+right.
+intuition.
+repeat find_reverse_rewrite.
+match goal with | _ : In (_, ?ll) (leaderLogs _) |- _ => eapply sorted_term_index_lt with (l := ll) end; eauto.
+*
+match goal with | _ : eIndex ?e = eIndex ?x, _ : In (_, ?ll) (leaderLogs _) |- _ => assert (e = x); subst; repeat find_rewrite; intuition; eapply uniqueIndices_elim_eq with (xs := ll); eauto using sorted_uniqueIndices end.
+*
+{
+left.
+repeat match goal with | H : contiguous_range_exact_lo _ _ |- _ => eapply contiguous_app in H; eauto; [idtac] end.
+match goal with | _ : eIndex ?x < eIndex ?e , H : locked_or _ (eIndex ?x = _) |- _ => unfold locked_or in H end.
+intuition.
+-
+match goal with | _ : ?x = [] -> False, _ : Prefix ?x ?ll |- In ?e _ => cut (In e x); eauto; eapply prefix_contiguous; eauto end.
+-
+exfalso.
+repeat find_rewrite.
+match goal with | H : In ?e ?l, _ : maxIndex ?l < eIndex ?e |- _ => eapply maxIndex_is_max in H end; eauto; omega.
+}
++
+match goal with | H : In ?e ?l, H' : In ?e' ?l', Hp : Prefix ?l _, Hp' : Prefix ?l' _ |- _ => copy_eapply Prefix_In H; try apply Hp; eauto; copy_eapply Prefix_In H'; try apply Hp'; eauto end.
+match goal with | _ : removeAfterIndex ?es _ = ?l, _ : contiguous_range_exact_lo ?l ?i |- context [In ?e ?es] => destruct (lt_eq_lt_dec (eIndex e) i); intuition end.
+*
+right.
+right.
+intuition.
+repeat find_reverse_rewrite.
+match goal with | _ : In (_, ?ll) (leaderLogs _) |- _ => eapply sorted_term_index_lt with (l := ll) end; eauto.
+*
+match goal with | _ : eIndex ?e = eIndex ?x, _ : In (_, ?ll) (leaderLogs _) |- _ => assert (e = x); subst; repeat find_rewrite; intuition; eapply uniqueIndices_elim_eq with (xs := ll); eauto using sorted_uniqueIndices end.
+*
+left.
+repeat match goal with | H : contiguous_range_exact_lo _ _ |- _ => eapply contiguous_app in H; eauto; [idtac] end.
+match goal with | _ : Prefix ?x ?ll |- In ?e _ => cut (In e x); eauto end.
+eapply prefix_contiguous; eauto.
+match goal with | [ H : locked_or (x2 = [] -> _) _ |- _ ] => unfold locked_or in H; invc H; auto end.
+match goal with | [ H : In ?e _, H' : _ < eIndex ?e |- _ ] => apply maxIndex_is_max in H; [|solve[eapply_prop leaderLogs_sorted; eauto]] end.
+omega.
+-
+left.
+break_exists.
+break_and.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In e ?l |- _ => assert (In e (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In e' ?l |- _ => assert (In e' (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+subst.
+repeat match goal with | _ : removeAfterIndex ?es _ = ?x ++ ?y, Hp : pBody _ = AppendEntries _ _ ?i _ ?es _ |- _ => try match goal with | _ : sorted (x ++ y) |- _ => fail 2 end; assert (sorted (x ++ y)) by (repeat find_reverse_rewrite; eapply removeAfterIndex_sorted; eapply entries_sorted_nw_invariant; try apply Hp; eauto); assert (contiguous_range_exact_lo (x ++ y) i) by (repeat find_reverse_rewrite; eapply removeAfterIndex_contiguous; [eapply entries_sorted_nw_invariant; try apply Hp; eauto| eapply entries_contiguous_nw_invariant; try apply Hp; eauto]) end.
+repeat find_rewrite.
+repeat match goal with | H : ?x \/ ?y |- _ => copy_eapply contiguous_app_prefix_contiguous H; eauto; fold (locked_or x y) in H end.
+repeat do_in_app.
+intuition.
++
+subst.
+match goal with | _ : In e' ?x, _ : sorted (?x ++ _), H : contiguous_range_exact_lo ?x' _, _ : In e ?x' |- _ => assert (exists e'', eIndex e'' = eIndex e /\ In e'' x) by (eapply contiguous_app_prefix_2; eauto; intuition; [eapply H; eauto|eapply le_trans; eauto; eapply maxIndex_is_max; eauto using sorted_app_1]) end.
+break_exists.
+intuition.
+match goal with | H : refined_raft_intermediate_reachable _ |- _ => copy_apply entries_match_nw_1_invariant H end.
+match goal with | He : eIndex ?x = eIndex e, H : removeAfterIndex _ _ = _ |- _ => symmetry in He; assert (In x es') by (eapply removeAfterIndex_in; rewrite H; apply in_app_iff; intuition) end.
+repeat find_apply_hyp_hyp.
+match goal with | H : entries_match_nw_1 _ |- _ => eapply H with (es := es) (p := p) (p' := p') end.
+7: {
+eauto.
+}
+all:repeat find_rewrite.
+all:eauto.
+intuition.
+eapply entries_gt_0_nw_invariant; eauto.
++
+exfalso.
+find_eapply_lem_hyp Prefix_maxIndex; [|idtac|eauto]; eauto.
+match goal with | H: contiguous_range_exact_lo ?l ?i, _ : In ?e ?l, _ : eIndex _ <= ?i |- _ => assert (i < eIndex e) by (eapply H; eauto) end.
+omega.
++
+match goal with | H : removeAfterIndex _ _ = _ |- _ => eapply removeAfterIndex_in; rewrite H; apply in_app_iff; [idtac] end.
+eauto using Prefix_In.
++
+match goal with | H : removeAfterIndex _ _ = _ |- _ => eapply removeAfterIndex_in; rewrite H; apply in_app_iff; [idtac] end.
+eauto using Prefix_In.
+-
+break_exists.
+break_and.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In e ?l |- _ => assert (In e (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In e' ?l |- _ => assert (In e' (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+subst.
+repeat match goal with | _ : removeAfterIndex ?es _ = ?x ++ ?y, Hp : pBody _ = AppendEntries _ _ ?i _ ?es _ |- _ => try match goal with | _ : sorted (x ++ y) |- _ => fail 2 end; assert (sorted (x ++ y)) by (repeat find_reverse_rewrite; eapply removeAfterIndex_sorted; eapply entries_sorted_nw_invariant; try apply Hp; eauto); assert (contiguous_range_exact_lo (x ++ y) i) by (repeat find_reverse_rewrite; eapply removeAfterIndex_contiguous; [eapply entries_sorted_nw_invariant; try apply Hp; eauto| eapply entries_contiguous_nw_invariant; try apply Hp; eauto]) end.
+repeat find_rewrite.
+repeat match goal with | H : ?x \/ ?y |- _ => copy_eapply contiguous_app_prefix_contiguous H; eauto; fold (locked_or x y) in H end.
+repeat do_in_app.
+intuition.
++
+left.
+assert (exists e'', eIndex e'' = eIndex e /\ In e'' x1).
+{
+eapply_prop (contiguous_range_exact_lo x1).
+intuition.
+-
+eapply contiguous_0_app; eauto.
+-
+eapply le_trans; eauto.
+eapply maxIndex_is_max; eauto using sorted_app_1.
+}
+break_exists.
+intuition.
+match goal with | H : refined_raft_intermediate_reachable _ |- _ => copy_apply entries_match_nw_1_invariant H end.
+match goal with | He : eIndex ?x = eIndex e, H : removeAfterIndex _ _ = _ |- _ => symmetry in He; assert (In x es') by (eapply removeAfterIndex_in; rewrite H; apply in_app_iff; intuition) end.
+repeat find_apply_hyp_hyp.
+match goal with | H : entries_match_nw_1 _ |- _ => eapply H with (es := es) (p := p) (p' := p') end.
+7: {
+eauto.
+}
+all:repeat find_rewrite.
+all:eauto.
+intuition.
+eapply entries_contiguous_nw_invariant; eauto.
++
+exfalso.
+find_eapply_lem_hyp Prefix_maxIndex; [|idtac|eauto]; eauto.
+find_eapply_lem_hyp contiguous_0_app; eauto.
+omega.
++
+match goal with | _ : removeAfterIndex ?es _ = ?l, _ : contiguous_range_exact_lo ?l ?i |- context [In ?e ?es] => destruct (lt_eq_lt_dec (eIndex e) i); intuition end.
+*
+right.
+right.
+intuition.
+repeat find_reverse_rewrite.
+match goal with | _ : In (_, ?ll) (leaderLogs _) |- _ => eapply sorted_term_index_lt with (l := ll) end; eauto.
+*
+match goal with | _ : eIndex ?e = eIndex ?x, _ : In (_, ?ll) (leaderLogs _) |- _ => assert (e = x); subst; repeat find_rewrite; intuition; eapply uniqueIndices_elim_eq with (xs := ll); eauto using sorted_uniqueIndices end.
+*
+{
+left.
+repeat match goal with | H : contiguous_range_exact_lo _ _ |- _ => eapply contiguous_app in H; eauto; [idtac] end.
+match goal with | _ : eIndex ?x < eIndex ?e , H : locked_or _ (eIndex ?x = _) |- _ => unfold locked_or in H end.
+intuition.
+-
+match goal with | _ : ?x = [] -> False, _ : Prefix ?x ?ll |- In ?e _ => assert (In e x) by (eapply prefix_contiguous; eauto) end.
+match goal with | H : removeAfterIndex _ _ = _ |- _ => eapply removeAfterIndex_in; rewrite H; apply in_app_iff; intuition end.
+-
+exfalso.
+repeat find_rewrite.
+match goal with | H : In ?e ?l, _ : maxIndex ?l < eIndex ?e |- _ => eapply maxIndex_is_max in H end; eauto; omega.
+}
++
+match goal with | H : In ?e ?l, H' : In ?e' ?l', Hp : Prefix ?l _, Hp' : Prefix ?l' _ |- _ => copy_eapply Prefix_In H; try apply Hp; eauto; copy_eapply Prefix_In H'; try apply Hp'; eauto end.
+match goal with | _ : removeAfterIndex ?es _ = ?l, _ : contiguous_range_exact_lo ?l ?i |- context [In ?e ?es] => destruct (lt_eq_lt_dec (eIndex e) i); intuition end.
+*
+right.
+right.
+intuition.
+repeat find_reverse_rewrite.
+match goal with | _ : In (_, ?ll) (leaderLogs _) |- _ => eapply sorted_term_index_lt with (l := ll) end; eauto.
+*
+match goal with | _ : eIndex ?e = eIndex ?x, _ : In (_, ?ll) (leaderLogs _) |- _ => assert (e = x); subst; repeat find_rewrite; intuition; eapply uniqueIndices_elim_eq with (xs := ll); eauto using sorted_uniqueIndices end.
+*
+left.
+repeat match goal with | H : contiguous_range_exact_lo _ _ |- _ => eapply contiguous_app in H; eauto; [idtac] end.
+assert (x2 <> []).
+{
+unfold locked_or in *.
+intuition.
+find_apply_lem_hyp maxIndex_is_max; [|solve[eapply_prop leaderLogs_sorted; eauto]].
+omega.
+}
+match goal with | _ : Prefix ?x ?ll |- In ?e _ => assert (In e x2) by (eapply prefix_contiguous; eauto) end.
+match goal with | H : removeAfterIndex _ _ = _ |- _ => eapply removeAfterIndex_in; rewrite H; apply in_app_iff; intuition end.
+-
+left.
+repeat match goal with | _ : removeAfterIndex ?es _ = ?x ++ ?y, Hp : pBody _ = AppendEntries _ _ ?i _ ?es _ |- _ => try match goal with | _ : sorted (x ++ y) |- _ => fail 2 end; assert (sorted (x ++ y)) by (repeat find_reverse_rewrite; eapply removeAfterIndex_sorted; eapply entries_sorted_nw_invariant; try apply Hp; eauto); assert (contiguous_range_exact_lo (x ++ y) i) by (repeat find_reverse_rewrite; eapply removeAfterIndex_contiguous; [eapply entries_sorted_nw_invariant; try apply Hp; eauto| eapply entries_contiguous_nw_invariant; try apply Hp; eauto]) end.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In e ?l |- _ => assert (In e (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+match goal with | _ : removeAfterIndex ?l ?i = _, _ : In e' ?l |- _ => assert (In e' (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+repeat find_rewrite.
+repeat do_in_app.
+intuition.
++
+match goal with | H : In e _ |- _ => copy_eapply contiguous_0_app H; eauto; [idtac] end.
+match goal with | _ : In e' ?l, H : contiguous_range_exact_lo (?l ++ _) 0 |- _ => eapply contiguous_app_prefix_2 with (i := eIndex e) in H end; eauto; intuition; [|eapply le_trans; eauto; eapply maxIndex_is_max; eauto using sorted_app_1]; [idtac].
+break_exists.
+intuition.
+match goal with | H : refined_raft_intermediate_reachable _ |- _ => copy_apply entries_match_nw_1_invariant H end.
+match goal with | He : eIndex ?x = eIndex e, H : removeAfterIndex _ _ = _ |- _ => symmetry in He; assert (In x es') by (eapply removeAfterIndex_in; rewrite H; apply in_app_iff; intuition) end.
+repeat find_apply_hyp_hyp.
+match goal with | H : entries_match_nw_1 _ |- _ => eapply H with (es := es) (p := p) (p' := p') end.
+7: {
+eauto.
+}
+all:repeat find_rewrite.
+all:eauto.
+intuition.
++
+exfalso.
+find_eapply_lem_hyp Prefix_maxIndex; [|idtac|eauto]; eauto.
+find_eapply_lem_hyp contiguous_0_app; eauto.
+omega.
++
+match goal with | H : removeAfterIndex _ _ = _ |- _ => eapply removeAfterIndex_in; rewrite H; apply in_app_iff; [idtac] end.
+eauto using Prefix_In.
++
+match goal with | H : removeAfterIndex _ _ = _ |- _ => eapply removeAfterIndex_in; rewrite H; apply in_app_iff; [idtac] end.
+Admitted.
+
+Lemma findGtIndex_prefix_within_term : forall l1 l2 i, prefix_within_term l1 l2 -> prefix_within_term (findGtIndex l1 i) l2.
+Proof using.
+unfold prefix_within_term.
+intros.
+find_apply_lem_hyp findGtIndex_in.
+Admitted.
+
+Lemma update_elections_data_client_request_leaderLogs : forall h st client id c, leaderLogs (update_elections_data_client_request h st client id c) = leaderLogs (fst st).
+Proof using.
+unfold update_elections_data_client_request in *.
+intros.
+Admitted.
+
+Lemma update_elections_data_timeout_leaderLogs : forall h st, leaderLogs (update_elections_data_timeout h st) = leaderLogs (fst st).
+Proof using.
+unfold update_elections_data_timeout.
+intros.
+Admitted.
+
+Lemma update_elections_data_appendEntries_leaderLogs : forall h st t h' pli plt es ci, leaderLogs (update_elections_data_appendEntries h st t h' pli plt es ci) = leaderLogs (fst st).
+Proof using.
+intros.
+unfold update_elections_data_appendEntries.
+Admitted.
+
+Lemma update_elections_data_requestVote_leaderLogs : forall h h' t lli llt st, leaderLogs (update_elections_data_requestVote h h' t h' lli llt st) = leaderLogs (fst st).
+Proof using.
+unfold update_elections_data_requestVote.
+intros.
+Admitted.
+
+Lemma update_elections_data_requestVoteReply_leaderLogs : forall h h' t st t' ll' r, In (t', ll') (leaderLogs (fst st)) -> In (t', ll') (leaderLogs (update_elections_data_requestVoteReply h h' t r st)).
+Proof using.
+unfold update_elections_data_requestVoteReply.
+intros.
+repeat break_match; auto.
+simpl in *.
+Admitted.
+
+Lemma handleAppendEntriesReply_entries : forall h st t h' pli plt es ci st' t' es', handleAppendEntries h st t h' pli plt es ci = (st', AppendEntriesReply t' es' true) -> es' = es.
+Proof using.
+intros.
+unfold handleAppendEntries in *.
+Admitted.
+
+Lemma update_elections_data_appendEntries_allEntries : forall h st t h' pli plt es ci e, In e (map snd (allEntries (update_elections_data_appendEntries h st t h' pli plt es ci))) -> In e (map snd (allEntries (fst st))) \/ In e es.
+Proof using.
+intros.
+unfold update_elections_data_appendEntries in *.
+repeat break_match; subst; simpl in *; auto.
+find_apply_lem_hyp handleAppendEntriesReply_entries.
+subst.
+do_in_map.
+do_in_app.
+subst.
+intuition.
+-
+do_in_map.
+subst.
+simpl in *.
+auto.
+-
+left.
+apply in_map_iff.
+Admitted.
+
+Lemma update_elections_data_clientRequest_allEntries_new : forall h st client id c e, In e (map snd (allEntries (update_elections_data_client_request h st client id c))) -> In e (map snd (allEntries (fst st))) \/ (eIndex e = S (maxIndex (log (snd st))) /\ eTerm e = currentTerm (snd st) /\ type (snd st) = Leader).
+Proof using.
+intros.
+unfold update_elections_data_client_request in *.
+repeat break_match; subst; simpl in *; auto.
+intuition.
+subst.
+do_bool.
+find_apply_lem_hyp handleClientRequest_log.
+intuition.
+-
+match goal with | H : log _ = log (snd _) |- _ => symmetry in H end.
+repeat find_rewrite.
+simpl in *.
+omega.
+-
+break_exists.
+intuition.
+repeat find_rewrite.
+find_inversion.
+Admitted.
+
+Theorem log_log_prefix_within_term_invariant : forall net, refined_raft_intermediate_reachable net -> log_log_prefix_within_term net.
+Proof using ollpti rlmli llli.
+red.
+red.
+intros.
+match goal with | H : In ?e _, H' : In ?e' _ |- _ => copy_eapply logs_leaderLogs_invariant H; eauto; copy_eapply logs_leaderLogs_invariant H'; eauto end.
+break_exists; intuition.
+repeat find_rewrite.
+find_eapply_lem_hyp one_leaderLog_per_term_log_invariant; eauto.
+conclude_using eauto.
+subst.
+assert (exists e'', eIndex e'' = eIndex e /\ In e'' (log (snd (nwState net h')))) by (eapply entries_contiguous_invariant; eauto; intuition; [eapply entries_gt_0_invariant; eauto|]; eapply le_trans; eauto; eapply maxIndex_is_max; eauto; apply entries_sorted_invariant; auto).
+break_exists.
+intuition.
+match goal with | _ : removeAfterIndex ?l ?i = _ _, _ : In ?x ?l, _ : eIndex ?x = _ |- _ => assert (In x (removeAfterIndex l i)) by (apply removeAfterIndex_le_In; eauto; omega) end.
+repeat find_rewrite.
+do_in_app.
+intuition.
+-
+find_apply_hyp_hyp.
+eapply entries_match_invariant; eauto; repeat find_rewrite; auto.
+-
+cut (e = x0); intros; subst; intuition.
+eapply uniqueIndices_elim_eq; eauto.
++
+apply sorted_uniqueIndices.
+apply entries_sorted_invariant.
+auto.
++
+match goal with | H : context [ removeAfterIndex ?l ?index ] |- In _ ?l => apply removeAfterIndex_in with (i := index) end.
+repeat find_rewrite.
+apply in_app_iff; intuition.

@@ -1,0 +1,1 @@
+Hint Resolve (fun a n => eqTerm_refl _ _ _ _ _ _ _ _ _ cs a n) : core.

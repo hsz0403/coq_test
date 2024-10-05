@@ -1,0 +1,73 @@
+Require Import Reals Even Div2 Omega Psatz.
+Require Import mathcomp.ssreflect.ssreflect.
+Require Import Rcomplements Rbar Lim_seq Lub Hierarchy.
+Require Import Continuity Derive Seq_fct Series.
+Section Definitions.
+Context {K : AbsRing} {V : NormedModule K}.
+Definition is_pseries (a : nat -> V) (x:K) (l : V) := is_series (fun k => scal (pow_n x k) (a k)) l.
+Definition ex_pseries (a : nat -> V) (x : K) := ex_series (fun k => scal (pow_n x k) (a k)).
+End Definitions.
+Definition PSeries (a : nat -> R) (x : R) : R := Series (fun k => a k * x ^ k).
+Section Extensionality.
+Context {K : AbsRing} {V : NormedModule K}.
+End Extensionality.
+Section ConvergenceCircle.
+Context {K : AbsRing} {V : NormedModule K}.
+End ConvergenceCircle.
+Definition CV_disk (a : nat -> R) (r : R) := ex_series (fun n => Rabs (a n * r^n)).
+Definition CV_radius (a : nat -> R) : Rbar := Lub_Rbar (CV_disk a).
+Section PS_plus.
+Context {K : AbsRing} {V : NormedModule K}.
+Definition PS_plus (a b : nat -> V) (n : nat) : V := plus (a n) (b n).
+End PS_plus.
+Section PS_scal.
+Context {K : AbsRing} {V : NormedModule K}.
+Definition PS_scal (c : K) (a : nat -> V) (n : nat) : V := scal c (a n).
+End PS_scal.
+Definition PS_scal_r (c : R) (a : nat -> R) (n : nat) : R := a n * c.
+Section PS_incr.
+Context {K : AbsRing} {V : NormedModule K}.
+Definition PS_incr_1 (a : nat -> V) (n : nat) : V := match n with | 0 => zero | S n => a n end.
+Fixpoint PS_incr_n (a : nat -> V) (n k : nat) : V := match n with | O => a k | S n => PS_incr_1 (PS_incr_n a n) k end.
+Definition PS_decr_1 (a : nat -> V) (n : nat) : V := a (S n).
+Definition PS_decr_n (a : nat -> V) (n k : nat) : V := a (n + k)%nat.
+End PS_incr.
+Definition PS_mult (a b : nat -> R) n := sum_f_R0 (fun k => a k * b (n - k)%nat) n.
+Section PS_opp.
+Context {K : AbsRing} {V : NormedModule K}.
+Definition PS_opp (a : nat -> V) (n : nat) : V := opp (a n).
+End PS_opp.
+Section PS_minus.
+Context {K : AbsRing} {V : NormedModule K}.
+Definition PS_minus (a b : nat -> V) (n : nat) : V := plus (a n) (opp (b n)).
+End PS_minus.
+Definition PS_derive (a : nat -> R) (n : nat) := INR (S n) * a (S n).
+Definition PS_derive_n (n : nat) (a : nat -> R) := (fun k => (INR (fact (k + n)%nat) / INR (fact k)) * a (k + n)%nat).
+
+Lemma CV_radius_incr_1 (a : nat -> R) : CV_radius (PS_incr_1 a) = CV_radius a.
+Proof.
+assert (Ha := CV_radius_bounded a).
+assert (Ha' := CV_radius_bounded (PS_incr_1 a)).
+apply Rbar_le_antisym.
+apply Ha' => x [M Hx] ; apply Ha.
+move: (fun n => Hx (S n)) => {Hx} Hx ; simpl in Hx.
+case: (Req_dec x 0) => Hx0.
+rewrite Hx0 ; exists (Rabs (a O)) ; case => /= [ | n].
+rewrite Rmult_1_r ; by right.
+rewrite Rmult_0_l Rmult_0_r Rabs_R0.
+by apply Rabs_pos.
+exists (M / Rabs x) => n.
+apply Rle_div_r.
+by apply Rabs_pos_lt.
+by rewrite -Rabs_mult Rmult_assoc (Rmult_comm _ x).
+apply Ha => x [M Hx] ; apply Ha'.
+exists (M * Rabs x) ; case => [ | n] /=.
+rewrite Rmult_0_l Rabs_R0.
+apply Rmult_le_pos.
+eapply Rle_trans, (Hx O).
+by apply Rabs_pos.
+by apply Rabs_pos.
+rewrite (Rmult_comm x) -Rmult_assoc Rabs_mult.
+apply Rmult_le_compat_r.
+by apply Rabs_pos.
+by [].

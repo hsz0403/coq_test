@@ -1,0 +1,271 @@
+Require Import Reals mathcomp.ssreflect.ssreflect.
+Require Import Rbar Rcomplements Markov.
+Open Scope R_scope.
+Definition is_ub_Rbar (E : R -> Prop) (l : Rbar) := forall (x : R), E x -> Rbar_le x l.
+Definition is_lb_Rbar (E : R -> Prop) (l : Rbar) := forall (x : R), E x -> Rbar_le l x.
+Definition is_lub_Rbar (E : R -> Prop) (l : Rbar) := is_ub_Rbar E l /\ (forall b, is_ub_Rbar E b -> Rbar_le l b).
+Definition is_glb_Rbar (E : R -> Prop) (l : Rbar) := is_lb_Rbar E l /\ (forall b, is_lb_Rbar E b -> Rbar_le b l).
+Definition Lub_Rbar (E : R -> Prop) := proj1_sig (ex_lub_Rbar E).
+Definition Glb_Rbar (E : R -> Prop) := proj1_sig (ex_glb_Rbar E).
+Definition Rbar_is_upper_bound (E : Rbar -> Prop) (l : Rbar) := forall x, E x -> Rbar_le x l.
+Definition Rbar_is_lower_bound (E : Rbar -> Prop) (l : Rbar) := forall x, E x -> Rbar_le l x.
+Definition Rbar_is_lub (E : Rbar -> Prop) (l : Rbar) := Rbar_is_upper_bound E l /\ (forall b : Rbar, Rbar_is_upper_bound E b -> Rbar_le l b).
+Definition Rbar_is_glb (E : Rbar -> Prop) (l : Rbar) := Rbar_is_lower_bound E l /\ (forall b : Rbar, Rbar_is_lower_bound E b -> Rbar_le b l).
+Definition Rbar_lub (E : Rbar -> Prop) := proj1_sig (Rbar_ex_lub E).
+Definition Rbar_glb (E : Rbar -> Prop) := proj1_sig (Rbar_ex_glb E).
+Definition Empty (E : R -> Prop) := Lub_Rbar (fun x => x = 0 \/ E x) = Glb_Rbar (fun x => x = 0 \/ E x) /\ Lub_Rbar (fun x => x = 1 \/ E x) = Glb_Rbar (fun x => x = 1 \/ E x).
+
+Lemma is_lub_Rbar_unique (E : R -> Prop) (l : Rbar) : is_lub_Rbar E l -> Lub_Rbar E = l.
+Proof.
+move => Hl ; rewrite /Lub_Rbar ; case: ex_lub_Rbar => l' /= Hl'.
+apply Rbar_le_antisym.
+by apply Hl', Hl.
+Admitted.
+
+Lemma is_glb_Rbar_unique (E : R -> Prop) (l : Rbar) : is_glb_Rbar E l -> Glb_Rbar E = l.
+Proof.
+move => Hl ; rewrite /Glb_Rbar ; case: ex_glb_Rbar => l' /= Hl'.
+apply Rbar_le_antisym.
+by apply Hl, Hl'.
+Admitted.
+
+Lemma Lub_Rbar_correct (E : R -> Prop) : is_lub_Rbar E (Lub_Rbar E).
+Proof.
+Admitted.
+
+Lemma Glb_Rbar_correct (E : R -> Prop) : is_glb_Rbar E (Glb_Rbar E).
+Proof.
+Admitted.
+
+Lemma is_lub_Rbar_subset (E1 E2 : R -> Prop) (l1 l2 : Rbar) : (forall x : R, E2 x -> E1 x) -> is_lub_Rbar E1 l1 -> is_lub_Rbar E2 l2 -> Rbar_le l2 l1.
+Proof.
+move => H [ub1 _] [_ lub2].
+Admitted.
+
+Lemma is_glb_Rbar_subset (E1 E2 : R -> Prop) (l1 l2 : Rbar) : (forall x : R, E2 x -> E1 x) -> is_glb_Rbar E1 l1 -> is_glb_Rbar E2 l2 -> Rbar_le l1 l2.
+Proof.
+move => H [ub1 _] [_ lub2].
+Admitted.
+
+Lemma is_lub_Rbar_eqset (E1 E2 : R -> Prop) (l : Rbar) : (forall x : R, E2 x <-> E1 x) -> is_lub_Rbar E1 l -> is_lub_Rbar E2 l.
+Proof.
+move => H [ub1 lub1] ; split.
+apply (is_ub_Rbar_subset E1) ; [apply H | apply ub1].
+Admitted.
+
+Lemma is_glb_Rbar_eqset (E1 E2 : R -> Prop) (l : Rbar) : (forall x : R, E2 x <-> E1 x) -> is_glb_Rbar E1 l -> is_glb_Rbar E2 l.
+Proof.
+move => H [ub1 lub1] ; split.
+apply (is_lb_Rbar_subset E1) ; [apply H | apply ub1].
+Admitted.
+
+Lemma Lub_Rbar_eqset (E1 E2 : R -> Prop) : (forall x, E1 x <-> E2 x) -> Lub_Rbar E1 = Lub_Rbar E2.
+Proof.
+move => H ; rewrite {2}/Lub_Rbar ; case: ex_lub_Rbar => l /= Hl.
+apply is_lub_Rbar_unique.
+Admitted.
+
+Lemma Glb_Rbar_eqset (E1 E2 : R -> Prop) : (forall x, E1 x <-> E2 x) -> Glb_Rbar E1 = Glb_Rbar E2.
+Proof.
+move => H ; rewrite {2}/Glb_Rbar ; case: (ex_glb_Rbar E2) => l2 H2 /=.
+apply is_glb_Rbar_unique.
+Admitted.
+
+Lemma Rbar_ub_lb (E : Rbar -> Prop) (l : Rbar) : Rbar_is_upper_bound (fun x => E (Rbar_opp x)) (Rbar_opp l) <-> Rbar_is_lower_bound E l.
+Proof.
+split => Hl x Hx.
+apply Rbar_opp_le.
+apply Hl.
+by rewrite Rbar_opp_involutive.
+apply Rbar_opp_le.
+rewrite Rbar_opp_involutive.
+Admitted.
+
+Lemma Rbar_lb_ub (E : Rbar -> Prop) (l : Rbar) : Rbar_is_lower_bound (fun x => E (Rbar_opp x)) (Rbar_opp l) <-> Rbar_is_upper_bound E l.
+Proof.
+split => Hl x Hx.
+apply Rbar_opp_le.
+apply Hl.
+by rewrite Rbar_opp_involutive.
+apply Rbar_opp_le.
+rewrite Rbar_opp_involutive.
+Admitted.
+
+Lemma is_ub_Rbar_correct (E : R -> Prop) (l : Rbar) : is_ub_Rbar E l <-> Rbar_is_upper_bound (fun x => is_finite x /\ E x) l.
+Proof.
+Admitted.
+
+Lemma is_lb_Rbar_correct (E : R -> Prop) (l : Rbar) : is_lb_Rbar E l <-> Rbar_is_lower_bound (fun x => is_finite x /\ E x) l.
+Proof.
+Admitted.
+
+Lemma Rbar_ub_p_infty (E : Rbar -> Prop) : Rbar_is_upper_bound E p_infty.
+Proof.
+Admitted.
+
+Lemma Rbar_lb_m_infty (E : Rbar -> Prop) : Rbar_is_lower_bound E m_infty.
+Proof.
+Admitted.
+
+Lemma Rbar_ub_Finite (E : Rbar -> Prop) (l : R) : Rbar_is_upper_bound E l -> is_upper_bound (fun (x : R) => E x) l.
+Proof.
+intros H x Ex.
+Admitted.
+
+Lemma Rbar_lb_Finite (E : Rbar -> Prop) (l : R) : Rbar_is_lower_bound E (Finite l) -> is_upper_bound (fun x => E (Finite (- x))) (- l).
+Proof.
+intros H x Ex.
+Admitted.
+
+Lemma Rbar_ub_m_infty (E : Rbar -> Prop) : Rbar_is_upper_bound E m_infty -> forall x, E x -> x = m_infty.
+Proof.
+Admitted.
+
+Lemma Rbar_lb_p_infty (E : Rbar -> Prop) : Rbar_is_lower_bound E p_infty -> (forall x, E x -> x = p_infty).
+Proof.
+intros H x ; case x ; auto ; clear x ; [intros x| ] ; intros Hx.
+case (H _ Hx) ; simpl ; intuition.
+Admitted.
+
+Lemma Rbar_lb_eq_ub (E : Rbar -> Prop) (l : Rbar) : Rbar_is_lower_bound E l -> Rbar_is_upper_bound E l -> forall x, E x -> x = l.
+Proof.
+intros Hl Hu x Hx.
+Admitted.
+
+Lemma Rbar_ub_dec (E : Rbar -> Prop) (Hp : ~ E p_infty) : {M : R | Rbar_is_upper_bound E M} + {(forall (M : R), ~Rbar_is_upper_bound E M)}.
+Proof.
+destruct (is_ub_Rbar_dec E) as [ [M HM] | HM ].
+left ; exists M ; case => [x | | ] //= Hx.
+by apply HM.
+right => M.
+specialize (HM M).
+contradict HM => x Hx.
+Admitted.
+
+Lemma Rbar_lb_dec (E : Rbar -> Prop) (Hm : ~ E m_infty) : {M : R | Rbar_is_lower_bound E (Finite M)} + {(forall M, ~Rbar_is_lower_bound E (Finite M))}.
+Proof.
+destruct (Rbar_ub_dec (fun x => E (Rbar_opp x)) Hm) as [(M, H)|H].
+left ; exists (-M).
+apply Rbar_ub_lb ; simpl ; rewrite (Ropp_involutive M) ; auto.
+Admitted.
+
+Lemma Rbar_is_ub_subset (E1 E2 : Rbar -> Prop) (l : Rbar) : (forall x, E1 x -> E2 x) -> (Rbar_is_upper_bound E2 l) -> (Rbar_is_upper_bound E1 l).
+Proof.
+Admitted.
+
+Lemma Rbar_is_lb_subset (E1 E2 : Rbar -> Prop) (l : Rbar) : (forall x, E1 x -> E2 x) -> (Rbar_is_lower_bound E2 l) -> (Rbar_is_lower_bound E1 l).
+Proof.
+Admitted.
+
+Lemma Rbar_lub_glb (E : Rbar -> Prop) (l : Rbar) : Rbar_is_lub (fun x => E (Rbar_opp x)) (Rbar_opp l) <-> Rbar_is_glb E l.
+Proof.
+split ; [intros (ub, lub) | intros (lb, glb)] ; split.
+apply Rbar_ub_lb ; auto.
+intros b Hb ; generalize (lub _ (proj2 (Rbar_ub_lb _ _) Hb)) ; apply Rbar_opp_le.
+apply Rbar_lb_ub ; intros x ; simpl ; repeat rewrite Rbar_opp_involutive ; apply lb.
+intros b Hb.
+Admitted.
+
+Lemma Rbar_glb_lub (E : Rbar -> Prop) (l : Rbar) : Rbar_is_glb (fun x => E (Rbar_opp x)) (Rbar_opp l) <-> Rbar_is_lub E l.
+Proof.
+split ; [ intros (lb, glb) | intros (ub, lub)] ; split.
+apply Rbar_lb_ub ; auto.
+intros b Hb ; generalize (glb _ (proj2 (Rbar_lb_ub _ _) Hb)) ; apply Rbar_opp_le.
+apply Rbar_ub_lb ; intro x ; simpl ; repeat rewrite Rbar_opp_involutive ; apply ub.
+intros b Hb.
+Admitted.
+
+Lemma is_lub_Rbar_correct (E : R -> Prop) (l : Rbar) : is_lub_Rbar E l <-> Rbar_is_lub (fun x => is_finite x /\ E x) l.
+Proof.
+split => [[Hub Hlub]|[Hub Hlub]].
+split ; [ | move => b Hb ; apply Hlub ] ; by apply is_ub_Rbar_correct.
+Admitted.
+
+Lemma is_glb_Rbar_correct (E : R -> Prop) (l : Rbar) : is_glb_Rbar E l <-> Rbar_is_glb (fun x => is_finite x /\ E x) l.
+Proof.
+split => [[Hub Hlub]|[Hub Hlub]].
+split ; [ | move => b Hb ; apply Hlub ] ; by apply is_lb_Rbar_correct.
+Admitted.
+
+Lemma Rbar_ex_lub (E : Rbar -> Prop) : {l : Rbar | Rbar_is_lub E l}.
+Proof.
+destruct (EM_dec (E p_infty)) as [Hp|Hp].
+exists p_infty ; split.
+by case.
+intros b Hb.
+apply Rbar_not_lt_le.
+contradict Hp => H.
+apply: Rbar_le_not_lt Hp.
+by apply Hb.
+destruct (ex_lub_Rbar E) as [l Hl].
+exists l ; split.
+case => [x | | ] // Hx.
+by apply Hl.
+intros b Hb.
+apply Hl => x Hx.
+Admitted.
+
+Lemma Rbar_ex_glb (E : Rbar -> Prop) : {l : Rbar | Rbar_is_glb E l}.
+Proof.
+destruct (Rbar_ex_lub (fun x => E (Rbar_opp x))) as [l Hl].
+exists (Rbar_opp l).
+Admitted.
+
+Lemma Rbar_opp_glb_lub (E : Rbar -> Prop) : Rbar_glb (fun x => E (Rbar_opp x)) = Rbar_opp (Rbar_lub E).
+Proof.
+unfold Rbar_glb ; case (Rbar_ex_glb _) ; simpl ; intros g [Hg Hg'] ; unfold Rbar_lub ; case (Rbar_ex_lub _) ; simpl ; intros l [Hl Hl'] ; apply Rbar_le_antisym.
+apply Rbar_opp_le ; rewrite Rbar_opp_involutive ; apply Hl', Rbar_lb_ub ; rewrite Rbar_opp_involutive ; auto.
+Admitted.
+
+Lemma Rbar_opp_lub_glb (E : Rbar -> Prop) : Rbar_lub (fun x => E (Rbar_opp x)) = Rbar_opp (Rbar_glb E).
+Proof.
+unfold Rbar_glb ; case (Rbar_ex_glb _) ; simpl ; intros g (Hg, Hg') ; unfold Rbar_lub ; case (Rbar_ex_lub _) ; simpl ; intros l [Hl Hl'] ; apply Rbar_le_antisym.
+apply Hl', Rbar_lb_ub ; rewrite Rbar_opp_involutive ; apply (Rbar_is_lb_subset _ E) ; auto ; intros x ; rewrite Rbar_opp_involutive ; auto.
+Admitted.
+
+Lemma Rbar_is_lub_unique (E : Rbar -> Prop) (l : Rbar) : Rbar_is_lub E l -> Rbar_lub E = l.
+Proof.
+move => H.
+rewrite /Rbar_lub.
+case: Rbar_ex_lub => l0 H0 /=.
+apply Rbar_le_antisym.
+apply H0, H.
+Admitted.
+
+Lemma Rbar_is_glb_unique (E : Rbar -> Prop) (l : Rbar) : Rbar_is_glb E l -> Rbar_glb E = l.
+Proof.
+move => H.
+rewrite /Rbar_glb.
+case: Rbar_ex_glb => l0 H0 /=.
+apply Rbar_le_antisym.
+apply H, H0.
+Admitted.
+
+Lemma Rbar_glb_le_lub (E : Rbar -> Prop) : (exists x, E x) -> Rbar_le (Rbar_glb E) (Rbar_lub E).
+Proof.
+case => x Hex.
+apply Rbar_le_trans with x.
+unfold Rbar_glb ; case (Rbar_ex_glb _) ; simpl ; intros g (Hg, _) ; apply Hg ; auto.
+Admitted.
+
+Lemma Rbar_is_lub_subset (E1 E2 : Rbar -> Prop) (l1 l2 : Rbar) : (forall x, E1 x -> E2 x) -> (Rbar_is_lub E1 l1) -> (Rbar_is_lub E2 l2) -> Rbar_le l1 l2.
+Proof.
+intros Hs (_,H1) (H2, _).
+Admitted.
+
+Lemma Rbar_is_glb_subset (E1 E2 : Rbar -> Prop) (l1 l2 : Rbar) : (forall x, E2 x -> E1 x) -> (Rbar_is_glb E1 l1) -> (Rbar_is_glb E2 l2) -> Rbar_le l1 l2.
+Proof.
+intros Hs (H1, _) (_, H2).
+Admitted.
+
+Lemma Rbar_is_lub_eq (E1 E2 : Rbar -> Prop) (l1 l2 : Rbar) : (forall x, E1 x <-> E2 x) -> (Rbar_is_lub E1 l1) -> (Rbar_is_lub E2 l2) -> l1 = l2.
+Proof.
+Admitted.
+
+Lemma Rbar_is_glb_eq (E1 E2 : Rbar -> Prop) (l1 l2 : Rbar) : (forall x, E1 x <-> E2 x) -> (Rbar_is_glb E1 l1) -> (Rbar_is_glb E2 l2) -> l1 = l2.
+Proof.
+Admitted.
+
+Lemma Rbar_lb_le_ub (E : Rbar -> Prop) (l1 l2 : Rbar) : (exists x, E x) -> Rbar_is_lower_bound E l1 -> Rbar_is_upper_bound E l2 -> Rbar_le l1 l2.
+Proof.
+intros (x, Hex) Hl Hu ; apply Rbar_le_trans with (y := x) ; [apply Hl | apply Hu] ; auto.

@@ -1,0 +1,19 @@
+Require Import List.
+Require Import Undecidability.Synthetic.Undecidability.
+From Undecidability.Shared.Libs.DLW Require Import pos vec sss.
+From Undecidability.MinskyMachines Require Import mm_defs.
+From Undecidability.ILL Require Import ILL EILL eill eill_mm.
+Local Notation "P '/MM/' s ->> t" := (sss_compute (@mm_sss _) P s t) (at level 70, no associativity).
+Local Notation "P '/MM/' s ~~> t" := (sss_output (@mm_sss _) P s t) (at level 70, no associativity).
+Section MM_HALTING_EILL_PROVABILITY.
+Let f : MM_PROBLEM -> EILL_SEQUENT.
+Proof.
+intros (n & P & v).
+exact (Σ (1,P) 0, vec_map_list v (fun p : pos n => pos2nat p), 2 * n + 1).
+Defined.
+End MM_HALTING_EILL_PROVABILITY.
+
+Let f : MM_PROBLEM -> EILL_SEQUENT.
+Proof.
+intros (n & P & v).
+exact (Σ (1,P) 0, vec_map_list v (fun p : pos n => pos2nat p), 2 * n + 1).

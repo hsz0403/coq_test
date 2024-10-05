@@ -1,0 +1,89 @@
+Require Import VerdiRaft.Raft.
+Require Import VerdiRaft.RaftRefinementInterface.
+Local Arguments update {_} {_} _ _ _ _ _ : simpl never.
+Require Import VerdiRaft.SpecLemmas.
+Require Import VerdiRaft.RefinementSpecLemmas.
+Require Import VerdiRaft.VotesReceivedMoreUpToDateInterface.
+Require Import VerdiRaft.RequestVoteReplyMoreUpToDateInterface.
+Require Import VerdiRaft.LeaderLogsVotesWithLogInterface.
+Section LeaderLogsVotesWithLog.
+Context {orig_base_params : BaseParams}.
+Context {one_node_params : OneNodeParams orig_base_params}.
+Context {raft_params : RaftParams orig_base_params}.
+Context {rri : raft_refinement_interface}.
+Context {vrmutdi : votesReceived_moreUpToDate_interface}.
+Context {rvrmutdi : requestVoteReply_moreUpToDate_interface}.
+Instance llvwli : leaderLogs_votesWithLog_interface.
+split.
+intros.
+apply refined_raft_net_invariant; auto.
+-
+apply leaderLogs_votesWithLog_init.
+-
+apply leaderLogs_votesWithLog_client_request.
+-
+apply leaderLogs_votesWithLog_timeout.
+-
+apply leaderLogs_votesWithLog_append_entries.
+-
+apply leaderLogs_votesWithLog_append_entries_reply.
+-
+apply leaderLogs_votesWithLog_request_vote.
+-
+apply leaderLogs_votesWithLog_request_vote_reply.
+-
+apply leaderLogs_votesWithLog_do_leader.
+-
+apply leaderLogs_votesWithLog_do_generic_server.
+-
+apply leaderLogs_votesWithLog_state_same_packet_subset.
+-
+apply leaderLogs_votesWithLog_reboot.
+End LeaderLogsVotesWithLog.
+
+Lemma leaderLogs_votesWithLog_request_vote_reply : refined_raft_net_invariant_request_vote_reply leaderLogs_votesWithLog.
+Proof using rvrmutdi vrmutdi.
+red.
+unfold leaderLogs_votesWithLog.
+intros.
+simpl in *.
+subst.
+repeat find_higher_order_rewrite.
+destruct_update; simpl in *; eauto; [|eapply quorum_preserved; [|eauto]; intros; find_higher_order_rewrite; destruct_update; simpl in *; eauto; rewrite update_elections_data_request_vote_reply_votesWithLog; auto].
+find_eapply_lem_hyp leaderLogs_update_elections_data_RVR; eauto.
+intuition; [eapply quorum_preserved; [|eauto]; intros; find_higher_order_rewrite; destruct_update; simpl in *; eauto; rewrite update_elections_data_request_vote_reply_votesWithLog; auto|].
+subst.
+match goal with | |- context [handleRequestVoteReply ?h ?st ?h' ?t ?r] => remember (handleRequestVoteReply h st h' t r) as new_state end.
+find_eapply_lem_hyp handleRequestVoteReply_spec'.
+intuition.
+conclude_using ltac:(repeat find_rewrite; congruence).
+concludes.
+intuition.
+repeat find_rewrite.
+find_apply_lem_hyp wonElection_dedup_spec.
+break_exists_exists.
+intuition.
+find_apply_hyp_hyp.
+simpl in *.
+intuition.
+-
+subst.
+find_eapply_lem_hyp requestVoteReply_moreUpToDate_invariant; eauto.
+repeat find_rewrite.
+repeat conclude_using eauto.
+break_exists_exists.
+intuition.
+find_higher_order_rewrite.
+simpl in *.
+destruct_update; subst; simpl in *; eauto.
+repeat find_rewrite.
+rewrite update_elections_data_request_vote_reply_votesWithLog.
+auto.
+-
+find_eapply_lem_hyp votesReceived_moreUpToDate_invariant; eauto.
+break_exists_exists.
+intuition.
+find_higher_order_rewrite.
+destruct_update; simpl in *; eauto.
+rewrite update_elections_data_request_vote_reply_votesWithLog.
+auto.
